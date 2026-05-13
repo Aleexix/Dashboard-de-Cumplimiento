@@ -93,6 +93,7 @@ function switchBank(bankKey) {
   if (bankKey !== 'global' && !createdBankSections.has(bankKey)) {
     createdBankSections.add(bankKey);
     createBankSection(bankKey);
+    if (window._onBankCreated) window._onBankCreated(bankKey);
   }
 }
 
@@ -277,8 +278,9 @@ function createBankSection(bankKey) {
 
   // ── Timeline ──────────────────────────────────────────────────────────────
   let bankTLChart;
-  function renderBankTimeline(mode) {
-    const tl = bd.timeline;
+  function renderBankTimeline(mode, tlOverride, bkOverride) {
+    const tl      = tlOverride || bd.timeline;
+    const tickets = bkOverride || bk;
     const labels   = tl.map(d => d.fecha);
     const cumpleD  = tl.map(d => d.cumple);
     const incumpleD= tl.map(d => d.incumple);
@@ -302,7 +304,7 @@ function createBankSection(bankKey) {
         onClick: (e, els) => {
           if (!els.length) return;
           const fecha = labels[els[0].index];
-          const list  = bk.filter(t => t.fecha_coord === fecha);
+          const list  = tickets.filter(t => t.fecha_coord === fecha);
           openPanel(list, `${cfg.name} · ${fmtFecha(fecha)}`, fecha, [{ label: 'Tickets', value: list.length, accent: true }]);
         },
         plugins: {
@@ -324,6 +326,10 @@ function createBankSection(bankKey) {
       renderBankTimeline(t.dataset.mode);
     });
   });
+
+  // Exponer para filter.js
+  window._bankRenderFns = window._bankRenderFns || {};
+  window._bankRenderFns[bankKey] = renderBankTimeline;
 
   // ── Ciudades ──────────────────────────────────────────────────────────────
   new Chart(document.getElementById(`${p}-chart-ciudades`), {
@@ -769,24 +775,28 @@ renderDayList('dias-oficina',  DATA.oficina_incumple_dias.slice(0, 5),  COLORS.a
 // =========== TIMELINE ===========
 let timelineChart;
 
-function timelineClick(e, els, mode) {
+function timelineClick(e, els, mode, tix) {
   if (!els.length) return;
+  tix = tix || DATA.tickets;
+  const tl    = window._filteredTimeline || DATA.timeline;
   const idx   = els[0].index;
-  const fecha = DATA.timeline[idx].fecha;
+  const fecha = tl[idx].fecha;
   if (mode === 'pct') {
-    const tickets = DATA.tickets.filter(t => t.fecha_coord === fecha && t.belltech_estado);
+    const tickets = tix.filter(t => t.fecha_coord === fecha && t.belltech_estado);
     openPanel(tickets, 'Tickets del día ' + fmtFecha(fecha), 'Todos los servicios con estado Belltech · ' + fecha, [{ label: 'Total', value: tickets.length, accent: true }]);
     return;
   }
   const ds = els[0].datasetIndex;
   const estado = ds === 0 ? 'Cumple' : ds === 1 ? 'Incumple' : 'Reprogramación';
   const label  = ds === 0 ? 'Belltech Cumple' : ds === 1 ? 'Belltech Incumple' : 'Reprogramación';
-  const tickets = DATA.tickets.filter(t => t.fecha_coord === fecha && t.belltech_estado === estado);
+  const tickets = tix.filter(t => t.fecha_coord === fecha && t.belltech_estado === estado);
   openPanel(tickets, label + ' · ' + fmtFecha(fecha), fecha + ' · CAUSAL #02 = ' + estado, [{ label: 'Tickets', value: tickets.length, accent: true }, { label: 'Fecha', value: fecha }]);
 }
 
 function renderTimeline(mode) {
-  const tl      = DATA.timeline;
+  window._currentTimelineMode = mode;
+  const tl      = window._filteredTimeline || DATA.timeline;
+  const allTix  = window._filteredTickets  || DATA.tickets;
   const labels  = tl.map(d => d.fecha);
   const cumple  = tl.map(d => d.cumple);
   const incumple = tl.map(d => d.incumple);
@@ -819,7 +829,7 @@ function renderTimeline(mode) {
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
-      onClick: (e, els) => timelineClick(e, els, mode),
+      onClick: (e, els) => timelineClick(e, els, mode, allTix),
       plugins: {
         legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, padding: 14, color: '#334155', font: { size: 11 } } },
         tooltip: { ...TOOLTIP_BASE, titleColor: '#334155', bodyColor: '#475569', callbacks: { title: items => fmtFecha(items[0].label) + ' · clic para ver tickets' } },
