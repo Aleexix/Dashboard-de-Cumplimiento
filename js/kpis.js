@@ -13,8 +13,6 @@ document.getElementById('kpi-oficina-incumple-pct').textContent = oficinaPctIncu
 document.getElementById('kpi-incumple').textContent     = fmt(k.belltech_incumple);
 document.getElementById('kpi-reprog').textContent       = fmt(k.belltech_reprog);
 document.getElementById('kpi-total').textContent        = fmt(k.total_tickets);
-document.getElementById('range-text').innerHTML =
-  '<span>RANGO:&nbsp;' + k.fecha_min + '&nbsp;→&nbsp;' + k.fecha_max + '</span>';
 
 // =========== KPI CLICK HANDLERS ===========
 document.querySelectorAll('.kpi').forEach(el => {

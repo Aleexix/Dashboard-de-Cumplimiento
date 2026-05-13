@@ -196,6 +196,19 @@ def clean_serie(val):
         return str(int(val))
     return str(val).strip() or None
 
+def normalize_id(val):
+    if val is None:
+        return ''
+    if isinstance(val, float):
+        return '' if pd.isna(val) else str(int(val))
+    if isinstance(val, int):
+        return str(val)
+    s = str(val).strip()
+    try:
+        return str(int(float(s)))
+    except Exception:
+        return s
+
 
 # ─── MAPEO DE COLUMNAS ────────────────────────────────────────────────────────
 def norm(s):
@@ -239,6 +252,67 @@ def get_val(row, field, mapping, default=None):
     if isinstance(val, float) and pd.isna(val):
         return default
     return val if val is not None else default
+
+
+# ─── HOJA 2: RESPONSABLE EN ATENCIÓN ─────────────────────────────────────────
+def read_sheet2(filepath):
+    """Lee hoja 2 y devuelve {(serie, fecha_coord): {responsable_atencion, causal_hoja2}}.
+    CODIGO en hoja 2 = número de serie del cajero (campo SERIE en hoja 1).
+    FECHA en hoja 2  = fecha de coordinación del ticket.
+    """
+    try:
+        df2 = pd.read_excel(filepath, sheet_name=1)
+        df2.columns = [str(c).strip() for c in df2.columns]
+
+        col_exact = {c.strip().lower(): c for c in df2.columns}
+        col_norm  = {norm(c): c for c in df2.columns}
+
+        COLS = {
+            'codigo': ['codigo', 'código', 'serie', 'serial', 'nro cajero', 'número cajero'],
+            'fecha':  ['fecha', 'date', 'fecha coordinacion', 'fecha coord'],
+            'resp':   ['responsable en atencion', 'responsable en atención',
+                       'responsable atencion', 'resp atencion'],
+            'causal': ['causal', 'causa', 'motivo'],
+        }
+
+        def find_col(variants):
+            for v in variants:
+                if v.lower() in col_exact: return col_exact[v.lower()]
+                if norm(v) in col_norm:    return col_norm[norm(v)]
+            return None
+
+        col_codigo = find_col(COLS['codigo'])
+        col_fecha  = find_col(COLS['fecha'])
+        col_resp   = find_col(COLS['resp'])
+        col_causal = find_col(COLS['causal'])
+
+        if not col_codigo:
+            print('[WARN] Hoja 2: no se encontró columna CODIGO/SERIE')
+            return {}
+
+        def clean_str(v):
+            if v is None: return None
+            if isinstance(v, float) and pd.isna(v): return None
+            return str(v).strip() or None
+
+        lookup = {}
+        for _, row in df2.iterrows():
+            row = row.to_dict()
+            serie = normalize_id(row.get(col_codigo))
+            if not serie:
+                continue
+            fecha = fmt_date(row.get(col_fecha)) if col_fecha else None
+            key = (serie, fecha)   # (serie cajero, fecha_coord)
+            if key not in lookup:  # primer match gana si hay duplicados
+                lookup[key] = {
+                    'responsable_atencion': clean_str(row.get(col_resp))   if col_resp   else None,
+                    'causal_hoja2':         clean_str(row.get(col_causal)) if col_causal else None,
+                }
+
+        return lookup
+    except Exception as e:
+        print(f'[WARN] No se pudo leer hoja 2: {e}')
+        return {}
 
 
 # ─── PROCESAMIENTO EXCEL ──────────────────────────────────────────────────────
@@ -295,6 +369,14 @@ def process_excel(filepath):
             'banco':              get_banco(g('cliente')),
             'asignado':           g('asignado'),
         })
+
+    # ── Enriquecer desde hoja 2 (join por SERIE + fecha_coord) ───────────────
+    sheet2 = read_sheet2(filepath)
+    for t in tickets:
+        key   = (normalize_id(t['serie']), t['fecha_coord'])
+        extra = sheet2.get(key, {})
+        t['responsable_atencion'] = extra.get('responsable_atencion')
+        t['causal_hoja2']         = extra.get('causal_hoja2')
 
     # ── KPIs ──────────────────────────────────────────────────────────────────
     total      = len(tickets)
@@ -401,6 +483,16 @@ def process_excel(filepath):
         for k, v in sorted(tipif.items(), key=lambda x: -x[1])[:10]
     ]
 
+    # ── Responsable en Atención (hoja 2) ─────────────────────────────────────
+    resp_cnt = defaultdict(int)
+    for t in tickets:
+        r = t.get('responsable_atencion')
+        if r: resp_cnt[r] += 1
+    responsable_atencion_stats = [
+        {'label': k, 'count': v}
+        for k, v in sorted(resp_cnt.items(), key=lambda x: -x[1])
+    ]
+
     # ── Agregación por banco ──────────────────────────────────────────────────
     def build_bank_data(bt):
         if not bt: return None
@@ -501,9 +593,10 @@ def process_excel(filepath):
         'timeline':               timeline,
         'ciudades':               ciudades,
         'tipos_servicio':         tipos_servicio,
-        'tipif_incumple':         tipif_incumple,
-        'tickets':                tickets,
-        'banks':                  banks,
+        'tipif_incumple':              tipif_incumple,
+        'responsable_atencion_stats': responsable_atencion_stats,
+        'tickets':                    tickets,
+        'banks':                      banks,
     }
 
     js = 'const DATA = ' + json.dumps(data, ensure_ascii=False, separators=(',', ':')) + ';\n'

@@ -75,6 +75,13 @@ function renderTickets(list) {
           <span style="font-size:13px;font-weight:700;color:var(--cyan)">${llegadaFmt}</span>
         </div>` : ''}
 
+        ${t.responsable_atencion ? `
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+          <div style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:var(--violet-glow);border:1px solid rgba(124,58,237,.25);border-radius:6px">
+            <span style="font-size:9px;font-weight:600;color:var(--text-mute);text-transform:uppercase;letter-spacing:.06em">Responsable</span>
+            <span style="font-size:13px;font-weight:700;color:var(--violet)">${t.responsable_atencion}</span>
+          </div>
+        </div>` : ''}
         <div class="tk-meta">
           <div><span class="lbl">Sucursal</span><b>${t.sucursal || '—'}</b></div>
           <div><span class="lbl">Ciudad</span><b>${t.ciudad || '—'}</b></div>
@@ -83,7 +90,7 @@ function renderTickets(list) {
           <div><span class="lbl">Tipificación</span><b>${t.tipificacion || '—'}</b></div>
           <div><span class="lbl">Sub-tipif.</span><b>${t.subtipif || '—'}</b></div>
           <div><span class="lbl">Responsable</span><b>${t.responsable || '—'}</b></div>
-          <div><span class="lbl">Causal #2</span><b>${t.causal2 || '—'}</b></div>
+          <div><span class="lbl">Causal #2</span><b>${t.causal_hoja2 || t.causal2 || '—'}</b></div>
           <div><span class="lbl">Modelo</span><b>${t.modelo || '—'}</b></div>
           <div><span class="lbl">MAU</span><b>${t.mau || '—'}</b></div>
           <div><span class="lbl">Creado</span><b>${t.creacion || '—'}</b></div>

@@ -114,7 +114,6 @@ function createBankSection(bankKey) {
       ${logoSrc ? `<img src="${logoSrc}" class="bank-section-logo" alt="${cfg.name}">` : `<span class="bank-header-info"><div class="bank-title" style="color:${cfg.color}">${cfg.name}</div></span>`}
       <div class="bank-header-info">
         <div class="bank-sub" style="color:${cfg.color};font-weight:600">${fmt(k.total_tickets)} tickets</div>
-        <div class="bank-sub">${k.belltech_pct_cumple.toFixed(1)}% cumplimiento Belltech · ${k.fecha_min} → ${k.fecha_max}</div>
       </div>
       <div class="bank-header-range">
         <span style="color:var(--green);font-weight:600">${k.belltech_pct_cumple.toFixed(1)}%</span> cumple<br>
@@ -129,6 +128,7 @@ function createBankSection(bankKey) {
         <div class="value" style="color:${cfg.color};text-shadow:0 0 30px ${cfg.glow}">${k.belltech_pct_cumple.toFixed(1)}%</div>
         <div class="sub">cumple cita · ${fmt(k.belltech_cumple)}</div>
       </div>
+      ${bankKey !== 'bbva' ? `
       <div class="kpi good" id="${p}-kpi-c2" style="--accent:${cfg.color}">
         <div class="label">Cumplimiento Oficina</div>
         <div class="value" style="color:${cfg.color};text-shadow:0 0 30px ${cfg.glow}">${k.oficina_pct_cumple.toFixed(1)}%</div>
@@ -136,18 +136,18 @@ function createBankSection(bankKey) {
           <span style="color:var(--green)">▲ ${fmt(k.oficina_cumple)} cumplen</span>
           <span style="color:var(--red)">▼ ${fmt(k.oficina_incumple)} incumplen · ${k.oficina_incumple + k.oficina_cumple > 0 ? (k.oficina_incumple*100/(k.oficina_incumple+k.oficina_cumple)).toFixed(1)+'%' : '—'}</span>
         </div>
-      </div>
-      <div class="kpi bad">
+      </div>` : ''}
+      <div class="kpi bad" id="${p}-kpi-incumple">
         <div class="label">Incumplimientos Belltech</div>
         <div class="value tabular">${fmt(k.belltech_incumple)}</div>
         <div class="sub">SLA + cita</div>
       </div>
-      <div class="kpi warn">
+      <div class="kpi warn" id="${p}-kpi-reprog">
         <div class="label">Reprogramaciones</div>
         <div class="value tabular">${fmt(k.belltech_reprog)}</div>
         <div class="sub">solicitudes Belltech</div>
       </div>
-      <div class="kpi info" style="--accent:${cfg.color}">
+      <div class="kpi info" id="${p}-kpi-total" style="--accent:${cfg.color}">
         <div class="label">Total Tickets</div>
         <div class="value tabular" style="color:${cfg.color}">${fmt(k.total_tickets)}</div>
         <div class="sub">en el período</div>
@@ -206,6 +206,32 @@ function createBankSection(bankKey) {
       </div>
     </div>
   `;
+
+  // ── KPI click handlers ────────────────────────────────────────────────────
+  document.getElementById(`${p}-kpi-c1`).addEventListener('click', () =>
+    openPanel(bk.filter(t => t.belltech_estado === 'Cumple'),
+      `${cfg.name} · Belltech Cumple`, 'CAUSAL #02 = CUMPLE',
+      [{ label: 'Total', value: k.belltech_cumple, accent: true }]));
+
+  if (bankKey !== 'bbva')
+    document.getElementById(`${p}-kpi-c2`).addEventListener('click', () =>
+      openPanel(bk.filter(t => t.causal1 === 'OFICINA CUMPLE SERVICIO'),
+        `${cfg.name} · Oficina Cumple`, 'CAUSAL #01 = OFICINA CUMPLE',
+        [{ label: 'Total', value: k.oficina_cumple, accent: true }]));
+
+  document.getElementById(`${p}-kpi-incumple`).addEventListener('click', () =>
+    openPanel(bk.filter(t => t.belltech_estado === 'Incumple'),
+      `${cfg.name} · Incumplimientos`, 'CAUSAL #02 = INCUMPLE',
+      [{ label: 'Total', value: k.belltech_incumple, accent: true }]));
+
+  document.getElementById(`${p}-kpi-reprog`).addEventListener('click', () =>
+    openPanel(bk.filter(t => t.belltech_estado === 'Reprogramación'),
+      `${cfg.name} · Reprogramaciones`, 'CAUSAL #02 = REPROGRAMACIÓN',
+      [{ label: 'Total', value: k.belltech_reprog, accent: true }]));
+
+  document.getElementById(`${p}-kpi-total`).addEventListener('click', () =>
+    openPanel(bk, `${cfg.name} · Todos los tickets`, 'Base completa',
+      [{ label: 'Total', value: k.total_tickets, accent: true }]));
 
   // ── Donut Belltech ────────────────────────────────────────────────────────
   const btTotal = bd.belltech_causal.reduce((a, b) => a + b.count, 0);
@@ -455,20 +481,49 @@ const tituloIncumpleData = (() => {
     .slice(0, 10);
 })();
 
-// Tiempo promedio de resolución por estado Belltech (días)
-const tiempoEstadoData = (() => {
-  const map = { Cumple: [], Incumple: [], 'Reprogramación': [] };
-  DATA.tickets.forEach(t => {
-    if (!t.creacion || !t.cierre || !t.belltech_estado || !map[t.belltech_estado]) return;
-    const days = (new Date(t.cierre) - new Date(t.creacion)) / 86400000;
-    if (days >= 0 && days < 365) map[t.belltech_estado].push(days);
+// =========== RESPONSABLE EN ATENCIÓN (HOJA 2) ===========
+function renderResponsableList(elId, list) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="color:var(--text-mute);padding:20px;text-align:center;font-size:12px;">Sin datos · sube el Excel con la Hoja 2<br><span style="font-size:10px;opacity:.6">NOMBRE · CIUDAD · CODIGO · FECHA · RESPONSABLE EN ATENCIÓN · CAUSAL</span></div>';
+    return;
+  }
+  const RESP_COLORS = {
+    'DISPONIBILIDAD': COLORS.cyan,
+    'TÉCNICO':        COLORS.green,
+    'TECNICO':        COLORS.green,
+    'TORRE':          COLORS.amber,
+    'LOGISTICA':      COLORS.violet,
+    'LOGÍSTICA':      COLORS.violet,
+  };
+  const max = list[0].count;
+  el.innerHTML = list.map((d, i) => {
+    const color = RESP_COLORS[d.label.toUpperCase()] || COLORS.dim;
+    return `
+      <div class="day-row ${i === 0 ? 'first' : ''}" data-idx="${i}"
+           style="--accent:${color};--accent-text:${color};cursor:pointer">
+        <div class="bar-bg" style="width:${(d.count / max * 100).toFixed(1)}%"></div>
+        <div class="day-date">${d.label}</div>
+        <div class="day-count">${d.count}</div>
+      </div>`;
+  }).join('');
+
+  el.querySelectorAll('.day-row').forEach((row, i) => {
+    row.addEventListener('click', () => {
+      const d = list[i];
+      const tickets = DATA.tickets.filter(t => t.responsable_atencion === d.label);
+      openPanel(
+        tickets,
+        'Responsable · ' + d.label,
+        'RESPONSABLE EN ATENCIÓN = ' + d.label,
+        [{ label: 'Tickets', value: d.count, accent: true }]
+      );
+    });
   });
-  return Object.entries(map).map(([estado, days]) => ({
-    estado,
-    avg: days.length ? +(days.reduce((a, b) => a + b, 0) / days.length).toFixed(1) : 0,
-    count: days.length,
-  }));
-})();
+}
+
+renderResponsableList('responsable-atencion-list', DATA.responsable_atencion_stats || []);
 
 
 // =========== TOP 10 LLEGADA AL SITIO MÁS LENTA ===========
@@ -708,8 +763,8 @@ function renderDayList(elId, list, color, kind) {
   });
 }
 
-renderDayList('dias-belltech', DATA.belltech_incumple_dias, COLORS.red,   'belltech');
-renderDayList('dias-oficina',  DATA.oficina_incumple_dias,  COLORS.amber, 'oficina');
+renderDayList('dias-belltech', DATA.belltech_incumple_dias.slice(0, 5), COLORS.red,   'belltech');
+renderDayList('dias-oficina',  DATA.oficina_incumple_dias.slice(0, 5),  COLORS.amber, 'oficina');
 
 // =========== TIMELINE ===========
 let timelineChart;
@@ -820,41 +875,6 @@ new Chart(document.getElementById('chart-ciudades'), {
   },
 });
 
-// =========== TIEMPO PROMEDIO POR ESTADO (NUEVO) ===========
-new Chart(document.getElementById('chart-tiempo-estado'), {
-  type: 'bar',
-  data: {
-    labels: tiempoEstadoData.map(d => d.estado),
-    datasets: [{
-      label: 'Días promedio',
-      data: tiempoEstadoData.map(d => d.avg),
-      backgroundColor: [COLORS.green + 'cc', COLORS.red + 'cc', COLORS.amber + 'cc'],
-      borderRadius: 8, borderSkipped: false, barPercentage: 0.6,
-    }],
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false,
-    onClick: (e, els) => {
-      if (!els.length) return;
-      const idx    = els[0].index;
-      const estado = tiempoEstadoData[idx].estado;
-      const list   = DATA.tickets.filter(t => t.belltech_estado === estado);
-      openPanel(list, 'Tiempo promedio · ' + estado, 'ESTADO = ' + estado, [
-        { label: 'Tickets',    value: list.length,                accent: true },
-        { label: 'Estado',     value: estado },
-        { label: 'Días prom.', value: tiempoEstadoData[idx].avg },
-      ]);
-    },
-    plugins: {
-      legend: { display: false },
-      tooltip: { ...TOOLTIP_BASE, callbacks: { footer: items => tiempoEstadoData[items[0].dataIndex].count + ' tickets · Clic para ver' } },
-    },
-    scales: {
-      x: { grid: { display: false }, ticks: { color: '#334155', font: { size: 12 } } },
-      y: { beginAtZero: true, grid: { color: 'rgba(31,41,55,0.5)' }, ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: v => v + 'd' } },
-    },
-  },
-});
 
 // =========== TIPO SERVICIO ===========
 new Chart(document.getElementById('chart-tiposervicio'), {
@@ -995,64 +1015,6 @@ new Chart(document.getElementById('chart-titulo-incumple'), {
   },
 });
 
-// =========== TIEMPO DE RESOLUCIÓN POR TIPO DE SERVICIO (datos reales) ===========
-const tiempoTipoServicioData = (() => {
-  const map = {};
-  DATA.tickets.forEach(t => {
-    const ts = t.tipo_servicio;
-    if (!ts || !t.creacion || !t.cierre) return;
-    const hours = (new Date(t.cierre) - new Date(t.creacion)) / 3600000;
-    if (hours >= 0 && hours < 8760) {
-      if (!map[ts]) map[ts] = { tipo: ts, hours: [], count: 0 };
-      map[ts].hours.push(hours);
-      map[ts].count++;
-    }
-  });
-  return Object.values(map)
-    .map(d => ({ tipo: d.tipo, avg: +(d.hours.reduce((a, b) => a + b, 0) / d.hours.length).toFixed(1), count: d.count }))
-    .sort((a, b) => b.avg - a.avg);
-})();
-
-new Chart(document.getElementById('chart-tiempo-tiposervicio'), {
-  type: 'bar',
-  data: {
-    labels: tiempoTipoServicioData.map(d => d.tipo),
-    datasets: [{
-      label: 'Horas promedio',
-      data: tiempoTipoServicioData.map(d => d.avg),
-      backgroundColor: ctx => {
-        const v = ctx.parsed.x ?? 0;
-        const max = Math.max(...tiempoTipoServicioData.map(d => d.avg));
-        return 'rgba(34, 211, 238, ' + (0.3 + (v / max) * 0.6) + ')';
-      },
-      borderRadius: 6, borderSkipped: false, barPercentage: 0.7,
-    }],
-  },
-  options: {
-    responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-    onClick: (e, els) => {
-      if (!els.length) return;
-      const tipo = tiempoTipoServicioData[els[0].index].tipo;
-      const list = DATA.tickets.filter(t => t.tipo_servicio === tipo);
-      openPanel(list, 'Tiempo · ' + tipo, 'Tickets de tipo ' + tipo + ' con fechas de creación y cierre', [
-        { label: 'Tickets',   value: tiempoTipoServicioData[els[0].index].count, accent: true },
-        { label: 'Promedio',  value: tiempoTipoServicioData[els[0].index].avg + 'h' },
-        { label: 'Tipo',      value: tipo },
-      ]);
-    },
-    plugins: {
-      legend: { display: false },
-      tooltip: { ...TOOLTIP_BASE, callbacks: {
-        label: c => '  Promedio: ' + c.parsed.x + ' horas',
-        footer: items => tiempoTipoServicioData[items[0].dataIndex].count + ' tickets · Clic para ver',
-      }},
-    },
-    scales: {
-      x: { beginAtZero: true, grid: { color: 'rgba(31,41,55,0.5)' }, ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 10 }, callback: v => v + 'h' } },
-      y: { grid: { display: false }, ticks: { color: '#334155', font: { size: 11 } } },
-    },
-  },
-});
 
 // =========== TOP ATMs MÁS PROBLEMÁTICOS ===========
 // Usa datos reales si DATA.tickets tiene campo 'serie', si no usa placeholder
@@ -1074,7 +1036,7 @@ const atmTopData = hasSerieData ? (() => {
     map[t.serie].total++;
     if (t.belltech_estado === 'Incumple') map[t.serie].incumple++;
   });
-  return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 10);
+  return Object.values(map).sort((a, b) => b.incumple - a.incumple).slice(0, 10);
 })() : [
   // PLACEHOLDER: se reemplaza automáticamente al subir Excel con columna SERIE
   { serie: '1042', total: 12, incumple: 8 },
@@ -1112,10 +1074,15 @@ new Chart(document.getElementById('chart-atms-top'), {
     responsive: true, maintainAspectRatio: false, indexAxis: 'y',
     onClick: (e, els) => {
       if (!els.length) return;
-      const d = atmTopData[els[0].index];
+      const d   = atmTopData[els[0].index];
       const pct = ((d.incumple / d.total) * 100).toFixed(1);
-      openPanel([], '#' + d.serie + ' · Placeholder', 'Campo SERIE pendiente de importar desde Excel',
-        [{ label: 'Serie', value: '#' + d.serie }, { label: 'Total', value: d.total, accent: true }, { label: '% Incumple', value: pct + '%' }]);
+      const isIncumple = els[0].datasetIndex === 1;
+      const list = DATA.tickets.filter(t =>
+        t.serie === d.serie && (isIncumple ? t.belltech_estado === 'Incumple' : t.belltech_estado !== 'Incumple')
+      );
+      openPanel(list, 'ATM #' + d.serie + (isIncumple ? ' · Incumple' : ' · Cumple/Reprog'),
+        'SERIE = ' + d.serie,
+        [{ label: 'Tickets', value: list.length, accent: true }, { label: '% Incumple', value: pct + '%' }]);
     },
     plugins: {
       legend: { position: 'top', align: 'end', labels: { boxWidth: 10, boxHeight: 10, padding: 12, color: '#334155', font: { size: 11 } } },
@@ -1123,7 +1090,7 @@ new Chart(document.getElementById('chart-atms-top'), {
         title: items => 'ATM #' + atmTopData[items[0].dataIndex].serie,
         footer: items => {
           const d = atmTopData[items[0].dataIndex];
-          return '  ' + ((d.incumple / d.total) * 100).toFixed(1) + '% incumplimiento · Placeholder';
+          return '  ' + ((d.incumple / d.total) * 100).toFixed(1) + '% incumplimiento · Clic para ver tickets';
         },
       }},
     },
@@ -1134,94 +1101,67 @@ new Chart(document.getElementById('chart-atms-top'), {
   },
 });
 
-// =========== ATMs REINCIDENTES ===========
-const atmReincidentesData = hasSerieData ? (() => {
-  const map = {};
+// =========== TÉCNICO CON MÁS INCUMPLIMIENTOS ===========
+const tecnicoIncumpleData = (() => {
+  const map = {};  // nombre_limpio → { count, raws: Set de valores originales }
   DATA.tickets.forEach(t => {
-    if (!t.serie) return;
-    map[t.serie] = (map[t.serie] || 0) + 1;
+    if (!t.asignado || t.belltech_estado !== 'Incumple') return;
+    const raw = t.asignado;
+    if (raw.includes('@gmail.com')) return;
+    const nombre = raw.includes('<')
+      ? raw.slice(0, raw.indexOf('<')).trim()
+      : raw.trim();
+    if (!nombre) return;
+    if (!map[nombre]) map[nombre] = { count: 0, raws: new Set() };
+    map[nombre].count++;
+    map[nombre].raws.add(raw);
   });
   return Object.entries(map)
-    .filter(([, count]) => count >= 3)
-    .map(([serie, count]) => ({ serie, count }))
-    .sort((a, b) => b.count - a.count);
-})() : [
-  // PLACEHOLDER: se reemplaza automáticamente al subir Excel con columna SERIE
-  { serie: '1042', count: 12 },
-  { serie: '3891', count: 10 },
-  { serie: '5234', count: 9  },
-  { serie: '7103', count: 8  },
-  { serie: '2456', count: 8  },
-  { serie: '8811', count: 7  },
-  { serie: '4029', count: 6  },
-  { serie: '6350', count: 6  },
-  { serie: '9017', count: 5  },
-  { serie: '1763', count: 4  },
-  { serie: '2890', count: 4  },
-  { serie: '5501', count: 3  },
-  { serie: '7744', count: 3  },
-];
+    .map(([tecnico, d]) => ({ tecnico, count: d.count, raws: [...d.raws] }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+})();
 
-const reincThreshold = 3;
-
-new Chart(document.getElementById('chart-atms-reincidentes'), {
+new Chart(document.getElementById('chart-tecnico-incumple'), {
   type: 'bar',
   data: {
-    labels: atmReincidentesData.map(d => '#' + d.serie),
-    datasets: [
-      {
-        label: 'Tickets en el período',
-        data: atmReincidentesData.map(d => d.count),
-        backgroundColor: ctx => {
-          const v = ctx.parsed.x ?? 0;
-          if (v >= 9)  return COLORS.red   + 'ee';
-          if (v >= 6)  return COLORS.red   + 'aa';
-          if (v >= 4)  return COLORS.amber + 'cc';
-          return COLORS.violet + 'aa';
-        },
-        borderRadius: [0, 6, 6, 0], borderSkipped: false, barPercentage: 0.65,
+    labels: tecnicoIncumpleData.map(d => d.tecnico),
+    datasets: [{
+      label: 'Incumplimientos',
+      data: tecnicoIncumpleData.map(d => d.count),
+      backgroundColor: ctx => {
+        const v = ctx.parsed.x ?? 0;
+        const max = Math.max(...tecnicoIncumpleData.map(d => d.count));
+        return 'rgba(220, 38, 38, ' + (0.35 + (v / max) * 0.55) + ')';
       },
-      {
-        label: 'Umbral reincidencia (3)',
-        data: atmReincidentesData.map(() => reincThreshold),
-        type: 'line',
-        borderColor: COLORS.cyan + 'bb',
-        borderWidth: 1.5,
-        borderDash: [5, 4],
-        pointRadius: 0,
-        fill: false,
-        tension: 0,
-      },
-    ],
+      borderRadius: 6, borderSkipped: false, barPercentage: 0.72,
+    }],
   },
   options: {
     responsive: true, maintainAspectRatio: false, indexAxis: 'y',
     onClick: (e, els) => {
       if (!els.length) return;
-      const d = atmReincidentesData[els[0].index];
-      openPanel([], '#' + d.serie + ' · Reincidente', 'Campo SERIE pendiente de importar desde Excel',
-        [{ label: 'Serie', value: '#' + d.serie }, { label: 'Tickets', value: d.count, accent: true }]);
+      const d    = tecnicoIncumpleData[els[0].index];
+      const list = DATA.tickets.filter(t => d.raws.includes(t.asignado) && t.belltech_estado === 'Incumple');
+      openPanel(list, d.tecnico + ' · Incumplimientos',
+        'TÉCNICO = ' + d.tecnico + ' · BELLTECH INCUMPLE',
+        [{ label: 'Incumplimientos', value: d.count, accent: true }]);
     },
     plugins: {
-      legend: {
-        position: 'top', align: 'end',
-        labels: {
-          boxWidth: 10, boxHeight: 2, padding: 12, color: '#334155', font: { size: 10 },
-          filter: item => item.datasetIndex === 1,
-        },
-      },
+      legend: { display: false },
       tooltip: { ...TOOLTIP_BASE, callbacks: {
-        title: items => 'ATM #' + atmReincidentesData[items[0].dataIndex].serie,
-        label: c => c.datasetIndex === 0 ? '  ' + c.parsed.x + ' tickets en el período' : null,
-        footer: () => 'Rojo ≥9 · Rojo-claro ≥6 · Ámbar ≥4 · Violeta =3',
+        title:  items => tecnicoIncumpleData[items[0].dataIndex].tecnico,
+        label:  c => '  ' + c.parsed.x + ' incumplimientos',
+        footer: () => 'Clic para ver tickets',
       }},
     },
     scales: {
       x: { beginAtZero: true, grid: { color: 'rgba(31,41,55,0.5)' }, ticks: { color: '#64748b', font: { family: "'JetBrains Mono', monospace", size: 10 }, stepSize: 1 } },
-      y: { grid: { display: false }, ticks: { color: '#334155', font: { family: "'JetBrains Mono', monospace", size: 12, weight: '600' } } },
+      y: { grid: { display: false }, ticks: { color: '#334155', font: { size: 11 } } },
     },
   },
 });
+
 
 // =========== INSIGHT ===========
 {

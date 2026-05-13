@@ -22,10 +22,6 @@
         <h1>Dashboard de Cumplimiento</h1>
       </div>
     </div>
-    <div class="meta">
-      <div class="row"><span class="dot"></span><span id="live-text">LIVE · 998 tickets analizados</span></div>
-      <div class="row" id="range-text">—</div>
-    </div>
   </header>
 
   <!-- ===== UPLOAD ===== -->
@@ -57,11 +53,6 @@
 
   <!-- ===== SECCIÓN GLOBAL ===== -->
   <div id="section-global" class="bank-section active">
-
-  <div class="hint-banner">
-    <div class="badge">DRILL-DOWN</div>
-    <span>Haz clic en cualquier gráfico, barra, segmento o KPI para ver los tickets exactos detrás del número. Usa <kbd>ESC</kbd> para cerrar.</span>
-  </div>
 
   <!-- ===== KPIs ===== -->
   <section class="kpi-grid">
@@ -183,12 +174,12 @@
     <div class="card col-4">
       <div class="card-head">
         <div>
-          <div class="card-title">Tiempo promedio de resolución</div>
-          <div class="card-sub">Días entre creación y cierre · por estado Belltech</div>
+          <div class="card-title">Responsable en Atención</div>
+          <div class="card-sub">Motivo de incumplimiento o reprogramación · Hoja 2</div>
         </div>
-        <div class="card-tag">CLICK</div>
+        <div class="card-tag">CLICK FILA</div>
       </div>
-      <div class="chart-box tall"><canvas id="chart-tiempo-estado"></canvas></div>
+      <div class="day-list" id="responsable-atencion-list"></div>
     </div>
 
     <!-- Tipo servicio + Top sucursales -->
@@ -213,8 +204,8 @@
       <div class="chart-box"><canvas id="chart-sucursales"></canvas></div>
     </div>
 
-    <!-- Tipificaciones incumple (full width) -->
-    <div class="card col-12">
+    <!-- Tipificaciones incumple + Títulos incumple (mitad y mitad) -->
+    <div class="card col-6">
       <div class="card-head">
         <div>
           <div class="card-title">Tipificaciones que generan incumplimiento Belltech</div>
@@ -225,8 +216,7 @@
       <div class="chart-box"><canvas id="chart-tipif-incumple"></canvas></div>
     </div>
 
-    <!-- Títulos que incumplen (full width) -->
-    <div class="card col-12">
+    <div class="card col-6">
       <div class="card-head">
         <div>
           <div class="card-title">Títulos de servicio que generan incumplimiento Belltech</div>
@@ -243,18 +233,6 @@
   <div class="section-title">Tiempos de Resolución · ATMs <span class="small">CREACIÓN → CIERRE · SERIE cajero</span></div>
   <div class="grid">
 
-    <!-- Tiempo resolución por tipo de servicio (datos reales) -->
-    <div class="card col-12">
-      <div class="card-head">
-        <div>
-          <div class="card-title">Tiempo promedio de resolución por tipo de servicio</div>
-          <div class="card-sub">Horas entre CREACIÓN y CIERRE · agrupado por tipo · clic para ver tickets</div>
-        </div>
-        <div class="card-tag">CLICK BARRA</div>
-      </div>
-      <div class="chart-box"><canvas id="chart-tiempo-tiposervicio"></canvas></div>
-    </div>
-
     <!-- Top ATMs problemáticos (placeholder) -->
     <div class="card col-6">
       <div class="card-head">
@@ -267,16 +245,16 @@
       <div class="chart-box tall"><canvas id="chart-atms-top"></canvas></div>
     </div>
 
-    <!-- ATMs reincidentes (placeholder) -->
+    <!-- Técnico con más incumplimientos -->
     <div class="card col-6">
       <div class="card-head">
         <div>
-          <div class="card-title">ATMs reincidentes · 3+ tickets</div>
-          <div class="card-sub">Candidatos a mantenimiento mayor · rojo ≥9 · ámbar ≥4 · violeta =3</div>
+          <div class="card-title">Top técnicos · más incumplimientos</div>
+          <div class="card-sub">Top 10 técnicos asignados con mayor incumplimiento Belltech</div>
         </div>
-        <div class="card-tag" data-placeholder="serie" style="color:var(--amber);border-color:rgba(251,191,36,0.5);background:rgba(251,191,36,0.08)">PLACEHOLDER · SERIE</div>
+        <div class="card-tag">CLICK BARRA</div>
       </div>
-      <div class="chart-box tall"><canvas id="chart-atms-reincidentes"></canvas></div>
+      <div class="chart-box tall"><canvas id="chart-tecnico-incumple"></canvas></div>
     </div>
 
   </div>
