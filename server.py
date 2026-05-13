@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""
-Servidor local · Dashboard de Cumplimiento ATM Operations
-Maneja la subida de Excel y regenera data.js automáticamente.
-
-Uso:
-    python server.py
-Acceso:
-    http://localhost:5000
-"""
-
 from flask import Flask, request, jsonify, send_from_directory
 import os, json, glob, traceback, unicodedata
 from datetime import datetime
@@ -614,10 +603,11 @@ def process_excel(filepath):
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
 if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
     print('\n' + '─' * 45)
     print('  Dashboard ATM Operations · Servidor local')
     print('─' * 45)
-    print('  Abre http://localhost:5000 en tu navegador')
+    print(f'  Abre http://localhost:{port} en tu navegador')
     print('  Ctrl+C para detener')
     print('─' * 45 + '\n')
-    app.run(debug=False, port=5000, host='0.0.0.0')
+    app.run(debug=False, port=port, host='0.0.0.0')
