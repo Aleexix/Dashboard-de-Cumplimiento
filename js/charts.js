@@ -90,7 +90,7 @@ function switchBank(bankKey) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Lazy-create charts for this bank (only once)
-  if (bankKey !== 'global' && !createdBankSections.has(bankKey)) {
+  if (bankKey !== 'global' && bankKey !== 'vs' && !createdBankSections.has(bankKey)) {
     createdBankSections.add(bankKey);
     createBankSection(bankKey);
     if (window._onBankCreated) window._onBankCreated(bankKey);

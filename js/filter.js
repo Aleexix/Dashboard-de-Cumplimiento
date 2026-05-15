@@ -167,8 +167,8 @@ function applyFilters() {
   renderResponsableList('responsable-atencion-list',
     Object.entries(respMap).sort((a,b)=>b[1]-a[1]).map(([label,count])=>({label,count})));
 
-  // Sección de banco activa
-  const activeSection = document.querySelector('.bank-section.active:not(#section-global)');
+  // Sección de banco activa (excluir VS — tiene sus propios datos inmunes al filtro)
+  const activeSection = document.querySelector('.bank-section.active:not(#section-global):not(#section-vs)');
   if (activeSection) {
     const bankKey = activeSection.id.replace('section-', '');
     applyBankFilter(bankKey);
