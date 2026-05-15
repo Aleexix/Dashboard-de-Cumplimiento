@@ -267,6 +267,12 @@ function applyBankFilter(bankKey) {
   const btArr = Object.entries(btMap).sort((a,b)=>b[1]-a[1]);
   _upd(`${p}-chart-belltech`, btArr.map(([l])=>l),
     [btArr.map(([,v])=>v)], [btArr.map(([l])=>belltechColor(l))]);
+
+  // Responsable en Atención del banco
+  const respMap = {};
+  tix.forEach(t => { if (t.responsable_atencion) respMap[t.responsable_atencion]=(respMap[t.responsable_atencion]||0)+1; });
+  const respArr = Object.entries(respMap).sort((a,b)=>b[1]-a[1]).map(([label,count])=>({label,count}));
+  renderResponsableList(`${p}-responsable-list`, respArr, tix);
 }
 
 // Hook para cuando se crea un banco en modo lazy

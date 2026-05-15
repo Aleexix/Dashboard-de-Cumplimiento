@@ -257,11 +257,12 @@ def read_sheet2(filepath):
         col_norm  = {norm(c): c for c in df2.columns}
 
         COLS = {
-            'codigo': ['codigo', 'código', 'serie', 'serial', 'nro cajero', 'número cajero'],
-            'fecha':  ['fecha', 'date', 'fecha coordinacion', 'fecha coord'],
-            'resp':   ['responsable en atencion', 'responsable en atención',
-                       'responsable atencion', 'resp atencion'],
-            'causal': ['causal', 'causa', 'motivo'],
+            'codigo':  ['codigo', 'código', 'serie', 'serial', 'nro cajero', 'número cajero'],
+            'fecha':   ['fecha', 'date', 'fecha coordinacion', 'fecha coord'],
+            'resp':    ['responsable en atencion', 'responsable en atención',
+                        'responsable atencion', 'resp atencion'],
+            'causal':  ['causal', 'causa', 'motivo'],
+            'cliente': ['cliente', 'client', 'banco', 'entidad'],
         }
 
         def find_col(variants):
@@ -270,10 +271,11 @@ def read_sheet2(filepath):
                 if norm(v) in col_norm:    return col_norm[norm(v)]
             return None
 
-        col_codigo = find_col(COLS['codigo'])
-        col_fecha  = find_col(COLS['fecha'])
-        col_resp   = find_col(COLS['resp'])
-        col_causal = find_col(COLS['causal'])
+        col_codigo  = find_col(COLS['codigo'])
+        col_fecha   = find_col(COLS['fecha'])
+        col_resp    = find_col(COLS['resp'])
+        col_causal  = find_col(COLS['causal'])
+        col_cliente = find_col(COLS['cliente'])
 
         if not col_codigo:
             print('[WARN] Hoja 2: no se encontró columna CODIGO/SERIE')
@@ -284,24 +286,108 @@ def read_sheet2(filepath):
             if isinstance(v, float) and pd.isna(v): return None
             return str(v).strip() or None
 
-        lookup = {}
+        # Dos índices: (serie, fecha, banco) preciso y (serie, fecha) fallback
+        lookup_full = {}
+        lookup_base = {}
         for _, row in df2.iterrows():
             row = row.to_dict()
             serie = normalize_id(row.get(col_codigo))
             if not serie:
                 continue
-            fecha = fmt_date(row.get(col_fecha)) if col_fecha else None
-            key = (serie, fecha)   # (serie cajero, fecha_coord)
-            if key not in lookup:  # primer match gana si hay duplicados
-                lookup[key] = {
-                    'responsable_atencion': clean_str(row.get(col_resp))   if col_resp   else None,
-                    'causal_hoja2':         clean_str(row.get(col_causal)) if col_causal else None,
-                }
+            fecha  = fmt_date(row.get(col_fecha)) if col_fecha else None
+            banco  = get_banco(row.get(col_cliente)) if col_cliente else None
+            entry  = {
+                'responsable_atencion': clean_str(row.get(col_resp))   if col_resp   else None,
+                'causal_hoja2':         clean_str(row.get(col_causal)) if col_causal else None,
+            }
+            if banco:
+                lookup_full[(serie, fecha, banco)] = entry
+            key_base = (serie, fecha)
+            if key_base not in lookup_base:
+                lookup_base[key_base] = entry
 
-        return lookup
+        return lookup_full, lookup_base
     except Exception as e:
         print(f'[WARN] No se pudo leer hoja 2: {e}')
-        return {}
+        return {}, {}
+
+
+# ─── HOJA 3: CAJEROS REINCIDENTES ────────────────────────────────────────────
+def read_sheet3(filepath):
+    """Lee hoja 3: CLIENTE, SERIE, CIUDAD, SITIO, TOTAL TICKETS."""
+    try:
+        df3 = pd.read_excel(filepath, sheet_name=2)
+        df3.columns = [str(c).strip() for c in df3.columns]
+
+        col_exact = {c.strip().lower(): c for c in df3.columns}
+        col_norm  = {norm(c): c for c in df3.columns}
+
+        COLS = {
+            'cliente': ['cliente', 'client', 'banco', 'entidad'],
+            'serie':   ['serie', 'serial', 'nro cajero', 'número cajero', 'numero cajero'],
+            'ciudad':  ['ciudad', 'city'],
+            'sitio':   ['sitio', 'site', 'sucursal', 'ubicacion', 'ubicación', 'nombre'],
+            'total':   ['total ticket', 'total tickets', 'total', 'tickets', 'cantidad'],
+        }
+
+        def find_col(variants):
+            for v in variants:
+                if v.lower() in col_exact: return col_exact[v.lower()]
+                if norm(v) in col_norm:    return col_norm[norm(v)]
+            return None
+
+        col_cliente = find_col(COLS['cliente'])
+        col_serie   = find_col(COLS['serie'])
+        col_ciudad  = find_col(COLS['ciudad'])
+        col_sitio   = find_col(COLS['sitio'])
+        col_total   = find_col(COLS['total'])
+
+        if not col_serie or not col_total:
+            print('[WARN] Hoja 3: no se encontraron columnas SERIE o TOTAL')
+            return None
+
+        def clean_str(v):
+            if v is None or (isinstance(v, float) and pd.isna(v)): return None
+            return str(v).strip() or None
+
+        rows = []
+        for _, row in df3.iterrows():
+            row = row.to_dict()
+            serie = clean_serie(row.get(col_serie))
+            if not serie:
+                continue
+            total_raw = row.get(col_total)
+            try:
+                total = int(float(total_raw))
+            except Exception:
+                continue
+            if total <= 0:
+                continue
+            cliente_raw = clean_str(row.get(col_cliente)) if col_cliente else None
+            rows.append({
+                'serie':   serie,
+                'ciudad':  clean_str(row.get(col_ciudad)),
+                'sitio':   clean_str(row.get(col_sitio)),
+                'total':   total,
+                'cliente': cliente_raw,
+                'banco':   get_banco(cliente_raw) if cliente_raw else None,
+            })
+
+        rows.sort(key=lambda x: -x['total'])
+
+        global_data = [{'serie': r['serie'], 'ciudad': r['ciudad'], 'sitio': r['sitio'], 'total': r['total'], 'cliente': r['cliente']} for r in rows]
+        banks_data  = {}
+        for r in rows:
+            b = r['banco']
+            if b:
+                if b not in banks_data:
+                    banks_data[b] = []
+                banks_data[b].append({'serie': r['serie'], 'ciudad': r['ciudad'], 'sitio': r['sitio'], 'total': r['total']})
+
+        return {'global': global_data, 'banks': banks_data}
+    except Exception as e:
+        print(f'[WARN] No se pudo leer hoja 3: {e}')
+        return None
 
 
 # ─── PROCESAMIENTO EXCEL ──────────────────────────────────────────────────────
@@ -359,11 +445,18 @@ def process_excel(filepath):
             'asignado':           g('asignado'),
         })
 
-    # ── Enriquecer desde hoja 2 (join por SERIE + fecha_coord) ───────────────
-    sheet2 = read_sheet2(filepath)
+    # ── Hoja 3: cajeros reincidentes ──────────────────────────────────────────
+    sheet3 = read_sheet3(filepath)
+
+    # ── Enriquecer desde hoja 2 (join por SERIE + fecha_coord [+ banco]) ────
+    sheet2_full, sheet2_base = read_sheet2(filepath)
     for t in tickets:
-        key   = (normalize_id(t['serie']), t['fecha_coord'])
-        extra = sheet2.get(key, {})
+        serie = normalize_id(t['serie'])
+        fecha = t['fecha_coord']
+        banco = t['banco']
+        extra = (sheet2_full.get((serie, fecha, banco))
+                 or sheet2_base.get((serie, fecha))
+                 or {})
         t['responsable_atencion'] = extra.get('responsable_atencion')
         t['causal_hoja2']         = extra.get('causal_hoja2')
 
@@ -548,16 +641,23 @@ def process_excel(filepath):
                 elif kind == 'oficina' and t['causal1'] == 'OFICINA INCUMPLE SERVICIO': c[f] += 1
             return [{'fecha': k, 'count': v} for k, v in sorted(c.items(), key=lambda x: -x[1])[:15]]
 
+        resp_bk = defaultdict(int)
+        for t in bt:
+            r = t.get('responsable_atencion')
+            if r: resp_bk[r] += 1
+        resp_stats_bk = [{'label': k, 'count': v} for k, v in sorted(resp_bk.items(), key=lambda x: -x[1])]
+
         return {
-            'kpis':                   bk_kpis,
-            'belltech_causal':        cnt('causal2'),
-            'oficina_causal':         cnt('causal1', lambda v: 'OFICINA' in str(v).upper()),
-            'belltech_incumple_dias': top_dias_b('belltech'),
-            'oficina_incumple_dias':  top_dias_b('oficina'),
-            'timeline':               [{'fecha': k, **v} for k, v in sorted(tl.items())],
-            'ciudades':               sorted([{'ciudad': k, **v} for k, v in ciu.items()], key=lambda x: -x['total'])[:15],
-            'tipos_servicio':         sorted([{'tipo': k, **v} for k, v in ts.items()], key=lambda x: -x['total']),
-            'tipif_incumple':         [{'tipif': k, 'count': v} for k, v in sorted(tipif.items(), key=lambda x: -x[1])[:10]],
+            'kpis':                      bk_kpis,
+            'belltech_causal':           cnt('causal2'),
+            'oficina_causal':            cnt('causal1', lambda v: 'OFICINA' in str(v).upper()),
+            'belltech_incumple_dias':    top_dias_b('belltech'),
+            'oficina_incumple_dias':     top_dias_b('oficina'),
+            'timeline':                  [{'fecha': k, **v} for k, v in sorted(tl.items())],
+            'ciudades':                  sorted([{'ciudad': k, **v} for k, v in ciu.items()], key=lambda x: -x['total'])[:15],
+            'tipos_servicio':            sorted([{'tipo': k, **v} for k, v in ts.items()], key=lambda x: -x['total']),
+            'tipif_incumple':            [{'tipif': k, 'count': v} for k, v in sorted(tipif.items(), key=lambda x: -x[1])[:10]],
+            'responsable_atencion_stats': resp_stats_bk,
         }
 
     BANK_ORDER = ['bancolombia', 'bbva', 'davivienda']
@@ -572,6 +672,12 @@ def process_excel(filepath):
             seen.add(b); all_bancos.append(b)
     banks = {b: build_bank_data([t for t in tickets if t.get('banco') == b]) for b in all_bancos}
 
+    # Agregar reincidentes de hoja 3 a cada banco
+    if sheet3 and sheet3.get('banks'):
+        for b, bd in banks.items():
+            if bd:
+                bd['reincidentes'] = sheet3['banks'].get(b, [])
+
     # ── Armar DATA ────────────────────────────────────────────────────────────
     data = {
         'kpis':                   kpis,
@@ -584,6 +690,7 @@ def process_excel(filepath):
         'tipos_servicio':         tipos_servicio,
         'tipif_incumple':              tipif_incumple,
         'responsable_atencion_stats': responsable_atencion_stats,
+        'reincidentes':               sheet3['global'] if sheet3 else [],
         'tickets':                    tickets,
         'banks':                      banks,
     }

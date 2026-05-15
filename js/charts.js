@@ -198,12 +198,19 @@ function createBankSection(bankKey) {
         </div><div class="card-tag">CLICK</div></div>
         <div class="chart-box tall"><canvas id="${p}-chart-tiposerv"></canvas></div>
       </div>
-      <div class="card col-12">
+      <div class="card col-7">
         <div class="card-head"><div>
           <div class="card-title">Tipificaciones que generan incumplimiento</div>
           <div class="card-sub">Top 10 razones de incumplimiento Belltech</div>
         </div><div class="card-tag">CLICK</div></div>
         <div class="chart-box"><canvas id="${p}-chart-tipif"></canvas></div>
+      </div>
+      <div class="card col-5">
+        <div class="card-head"><div>
+          <div class="card-title">Responsable en Atención</div>
+          <div class="card-sub">Motivo de incumplimiento · Hoja 2</div>
+        </div><div class="card-tag">CLICK FILA</div></div>
+        <div class="day-list" id="${p}-responsable-list"></div>
       </div>
     </div>
   `;
@@ -330,6 +337,32 @@ function createBankSection(bankKey) {
   // Exponer para filter.js
   window._bankRenderFns = window._bankRenderFns || {};
   window._bankRenderFns[bankKey] = renderBankTimeline;
+
+  // Responsable en Atención del banco
+  renderResponsableList(`${p}-responsable-list`,
+    bd.responsable_atencion_stats || [],
+    bk);
+
+  // Cajeros reincidentes del banco (hoja 3)
+  const reincBk = bd.reincidentes || [];
+  if (reincBk.length) {
+    const reincSection = document.createElement('div');
+    reincSection.innerHTML = `
+      <div class="section-title">Cajeros Reincidentes <span class="small">Hoja 3 · Abril–Mayo completo</span></div>
+      <div class="grid">
+        <div class="card col-12">
+          <div class="card-head"><div>
+            <div class="card-title">Top cajeros con más tickets en el período · ${cfg.name}</div>
+            <div class="card-sub">Datos consolidados · hover para ver ciudad y sitio</div>
+          </div></div>
+          <div id="${p}-reincidentes-box" style="position:relative;height:${Math.max(280, reincBk.length * 28)}px">
+            <canvas id="${p}-chart-reincidentes"></canvas>
+          </div>
+        </div>
+      </div>`;
+    sec.appendChild(reincSection);
+    renderReincidentesChart(`${p}-chart-reincidentes`, `${p}-reincidentes-box`, reincBk);
+  }
 
   // ── Ciudades ──────────────────────────────────────────────────────────────
   new Chart(document.getElementById(`${p}-chart-ciudades`), {
@@ -488,9 +521,10 @@ const tituloIncumpleData = (() => {
 })();
 
 // =========== RESPONSABLE EN ATENCIÓN (HOJA 2) ===========
-function renderResponsableList(elId, list) {
+function renderResponsableList(elId, list, ticketPool) {
   const el = document.getElementById(elId);
   if (!el) return;
+  const pool = ticketPool || DATA.tickets;
   if (!list || !list.length) {
     el.innerHTML = '<div style="color:var(--text-mute);padding:20px;text-align:center;font-size:12px;">Sin datos · sube el Excel con la Hoja 2<br><span style="font-size:10px;opacity:.6">NOMBRE · CIUDAD · CODIGO · FECHA · RESPONSABLE EN ATENCIÓN · CAUSAL</span></div>';
     return;
@@ -518,7 +552,7 @@ function renderResponsableList(elId, list) {
   el.querySelectorAll('.day-row').forEach((row, i) => {
     row.addEventListener('click', () => {
       const d = list[i];
-      const tickets = DATA.tickets.filter(t => t.responsable_atencion === d.label);
+      const tickets = pool.filter(t => t.responsable_atencion === d.label);
       openPanel(
         tickets,
         'Responsable · ' + d.label,
@@ -1172,6 +1206,129 @@ new Chart(document.getElementById('chart-tecnico-incumple'), {
   },
 });
 
+
+// =========== CAJEROS REINCIDENTES (HOJA 3) ===========
+function reincColor(total) {
+  if (total <= 1) return 'rgba(22,163,74,0.80)';    // verde  ≤ 1
+  if (total <= 4) return 'rgba(217,119,6,0.85)';    // ámbar  2–4
+  return            'rgba(220,38,38,0.85)';          // rojo   > 4
+}
+
+function renderReincidentesChart(canvasId, boxId, data, showCliente) {
+  if (!data || !data.length) return;
+
+  const PAGE_SIZE  = 15;
+  const totalPages = Math.ceil(data.length / PAGE_SIZE);
+  let   currentPage = 0;
+  let   chartInst   = null;
+
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  box.style.height = (PAGE_SIZE * 32 + 10) + 'px';
+
+  // Paginación
+  const BTN = 'padding:4px 11px;border-radius:6px;border:1px solid var(--line-2);background:var(--bg-2);color:var(--text-dim);font-size:12px;font-weight:600;cursor:pointer';
+  const pag = document.createElement('div');
+  pag.id = boxId + '-pag';
+  pag.style.cssText = 'display:flex;align-items:center;gap:8px;padding:10px 4px 4px;flex-wrap:wrap';
+  pag.innerHTML = `
+    <button id="${boxId}-prev" style="${BTN}" disabled>◀</button>
+    <span style="font-size:11px;color:var(--text-mute);font-family:'JetBrains Mono',monospace">Página</span>
+    <input id="${boxId}-input" type="number" min="1" max="${totalPages}" value="1"
+      style="width:52px;padding:3px 6px;border-radius:6px;border:1px solid var(--line-2);background:var(--bg-2);color:var(--text);font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;text-align:center">
+    <span id="${boxId}-total" style="font-size:11px;color:var(--text-mute);font-family:'JetBrains Mono',monospace">/ ${totalPages}</span>
+    <button id="${boxId}-next" style="${BTN}">▶</button>
+    <span id="${boxId}-count" style="margin-left:auto;font-size:10px;font-weight:600;color:var(--text-mute);font-family:'JetBrains Mono',monospace"></span>`;
+  box.insertAdjacentElement('afterend', pag);
+
+  function goTo(page) {
+    currentPage = Math.max(0, Math.min(page, totalPages - 1));
+    renderPage(currentPage);
+  }
+
+  function renderPage(page) {
+    const slice = data.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+    if (chartInst) { chartInst.destroy(); chartInst = null; }
+
+    chartInst = new Chart(document.getElementById(canvasId), {
+      type: 'bar',
+      data: {
+        labels: slice.map(d => '#' + d.serie),
+        datasets: [{
+          label: 'Tickets en el período',
+          data:  slice.map(d => d.total),
+          backgroundColor: ctx => reincColor(slice[ctx.dataIndex]?.total ?? 0),
+          borderRadius: 6, borderSkipped: false, barPercentage: 0.75,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, indexAxis: 'y',
+        events: ['mousemove', 'mouseout'],
+        plugins: {
+          legend: { display: false },
+          tooltip: { ...TOOLTIP_BASE,
+            callbacks: {
+              title:  items => 'Serie #' + slice[items[0].dataIndex].serie,
+              label:  c => '  ' + c.parsed.x + ' tickets en el período',
+              footer: items => {
+                const d = slice[items[0].dataIndex];
+                const lines = [];
+                if (showCliente && d.cliente) lines.push('Cliente: ' + d.cliente);
+                if (d.ciudad) lines.push('Ciudad: ' + d.ciudad);
+                if (d.sitio)  lines.push('Sitio: '  + d.sitio);
+                return lines;
+              },
+            },
+          },
+        },
+        scales: {
+          x: { beginAtZero: true, grid: { color: 'rgba(31,41,55,0.5)' }, ticks: { color: '#64748b', font: { family: "'JetBrains Mono',monospace", size: 10 }, stepSize: 1 } },
+          y: { grid: { display: false }, ticks: { color: '#334155', font: { family: "'JetBrains Mono',monospace", size: 12, weight: '600' } } },
+        },
+      },
+    });
+
+    // Controles
+    const inp   = document.getElementById(boxId + '-input');
+    const prev  = document.getElementById(boxId + '-prev');
+    const next  = document.getElementById(boxId + '-next');
+    const count = document.getElementById(boxId + '-count');
+    if (inp)   inp.value = page + 1;
+    if (prev)  { prev.disabled = page === 0;               prev.style.opacity = page === 0 ? '0.4' : '1'; }
+    if (next)  { next.disabled = page === totalPages - 1;  next.style.opacity = page === totalPages - 1 ? '0.4' : '1'; }
+    if (count) {
+      const from = page * PAGE_SIZE + 1;
+      const to   = Math.min((page + 1) * PAGE_SIZE, data.length);
+      count.textContent = `${from}–${to} de ${data.length}`;
+    }
+  }
+
+  renderPage(0);
+
+  document.getElementById(boxId + '-prev')?.addEventListener('click', () => goTo(currentPage - 1));
+  document.getElementById(boxId + '-next')?.addEventListener('click', () => goTo(currentPage + 1));
+
+  document.getElementById(boxId + '-input')?.addEventListener('change', e => {
+    const val = parseInt(e.target.value, 10);
+    if (!isNaN(val)) goTo(val - 1);
+  });
+  document.getElementById(boxId + '-input')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { const val = parseInt(e.target.value, 10); if (!isNaN(val)) goTo(val - 1); }
+  });
+}
+
+// Renderizar global
+renderReincidentesChart(
+  'chart-reincidentes-global',
+  'reincidentes-box-global',
+  DATA.reincidentes || [],
+  true   // mostrar cliente en hover
+);
+// Mostrar sección si hay datos
+if ((DATA.reincidentes || []).length) {
+  document.getElementById('reincidentes-title-global').style.display = '';
+  document.getElementById('reincidentes-grid-global').style.display  = '';
+}
 
 // =========== INSIGHT ===========
 {
