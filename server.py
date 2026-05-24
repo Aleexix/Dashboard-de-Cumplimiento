@@ -11,10 +11,13 @@ except ImportError:
     raise SystemExit(1)
 
 # ─── RUTAS ────────────────────────────────────────────────────────────────────
-BASE_DIR  = os.path.dirname(os.path.abspath(__file__))
-INPUT_DIR = os.path.join(BASE_DIR, 'input')
-DATA_JS   = os.path.join(BASE_DIR, 'js', 'data.js')
-os.makedirs(INPUT_DIR, exist_ok=True)
+BASE_DIR        = os.path.dirname(os.path.abspath(__file__))
+INPUT_DIR       = os.path.join(BASE_DIR, 'input')
+INPUT_DIR_DIARIO= os.path.join(BASE_DIR, 'input-diario')
+DATA_JS         = os.path.join(BASE_DIR, 'js', 'data.js')
+DATA_DIARIO_JS  = os.path.join(BASE_DIR, 'js', 'data-diario.js')
+os.makedirs(INPUT_DIR,        exist_ok=True)
+os.makedirs(INPUT_DIR_DIARIO, exist_ok=True)
 
 # ─── MAPEO FLEXIBLE DE COLUMNAS ───────────────────────────────────────────────
 # campo_interno → variantes posibles en el Excel (case-insensitive)
@@ -89,6 +92,40 @@ def api_status():
     files = glob.glob(os.path.join(INPUT_DIR, '*'))
     current = os.path.basename(files[0]) if files else None
     return jsonify({'current_file': current})
+
+@app.route('/api/status-diario')
+def api_status_diario():
+    files = glob.glob(os.path.join(INPUT_DIR_DIARIO, '*'))
+    current = os.path.basename(files[0]) if files else None
+    return jsonify({'current_file': current})
+
+@app.route('/api/upload-diario', methods=['POST'])
+def api_upload_diario():
+    if 'file' not in request.files:
+        return jsonify({'error': 'No se recibió ningún archivo.'}), 400
+
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Nombre de archivo vacío.'}), 400
+
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in ('.xlsx', '.xls'):
+        return jsonify({'error': f'Formato no soportado ({ext}). Solo .xlsx y .xls'}), 400
+
+    # Limpiar input-diario/ → solo un archivo a la vez
+    for f in glob.glob(os.path.join(INPUT_DIR_DIARIO, '*')):
+        os.remove(f)
+
+    filepath = os.path.join(INPUT_DIR_DIARIO, file.filename)
+    file.save(filepath)
+
+    try:
+        stats = process_excel_diario(filepath)
+        return jsonify({'success': True, 'filename': file.filename, 'stats': stats})
+    except Exception as e:
+        if os.path.exists(filepath):
+            os.remove(filepath)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
@@ -706,6 +743,141 @@ def process_excel(filepath):
         'columns_mapped':   list(col_map.keys()),
         'columns_missing':  missing,
     }
+
+
+# ─── PROCESAMIENTO INCUMPLIMIENTO DIARIO ──────────────────────────────────────
+def process_excel_diario(filepath):
+    """Procesa el Excel del incumplimiento diario y genera js/data-diario.js."""
+    df = pd.read_excel(filepath)
+    df.columns = [str(c).strip() for c in df.columns]
+
+    col_map, _ = map_columns(df)
+
+    tickets = []
+    for _, row in df.iterrows():
+        row  = row.to_dict()
+        g    = lambda f, d=None: get_val(row, f, col_map, d)
+        c2   = g('causal2')
+        estado = belltech_estado(c2)
+        tickets.append({
+            'id':      normalize_id(g('id')),
+            'sitio':   str(g('sucursal') or '').strip() or None,
+            'ciudad':  g('ciudad'),
+            'serie':   clean_serie(g('serie')),
+            'causal2': c2,
+            'estado':  estado,
+            'fecha':   fmt_date(g('coord')),
+            'banco':   get_banco(g('cliente')),
+        })
+
+    # Solo Bancolombia por ahora
+    tickets = [t for t in tickets if t['banco'] == 'bancolombia']
+
+    # Última fecha del archivo = "hoy"
+    fechas = sorted(set(t['fecha'] for t in tickets if t['fecha']))
+    hoy    = max((f for f in fechas if f <= str(pd.Timestamp.today().date())), default=fechas[-1] if fechas else None)
+
+    def make_resumen(pool):
+        total = len(pool)
+        cnt = defaultdict(int)
+        for t in pool:
+            cnt[t['estado'] or 'Sin clasificar'] += 1
+
+        ORDER = ['Cumple', 'Incumple', 'Reprogramación', 'Sin clasificar']
+        LABEL = {
+            'Cumple':          'BELLTECH CUMPLE CITA',
+            'Incumple':        'BELLTECH INCUMPLE SLA',
+            'Reprogramación':  'BELLTECH SOLICITA REPROGRAMACIÓN',
+            'Sin clasificar':  'SIN CLASIFICAR',
+        }
+        rows = []
+        for estado in ORDER:
+            if cnt[estado] == 0:
+                continue
+            rows.append({
+                'estado': estado,
+                'label':  LABEL.get(estado, estado),
+                'count':  cnt[estado],
+                'pct':    round(cnt[estado] * 100 / total, 2) if total else 0,
+            })
+
+        cumple   = cnt['Cumple']
+        incumple = cnt['Incumple'] + cnt.get('Sin clasificar', 0)
+        reprog   = cnt['Reprogramación']
+
+        return {
+            'total':       total,
+            'rows':        rows,
+            'cumple':      cumple,
+            'incumple':    cnt['Incumple'],
+            'reprog':      reprog,
+            'sin_causal':  cnt['Sin clasificar'],
+            'pct_cumple':  round(cumple * 100 / total, 2) if total else 0,
+            'pct_incumple':round((cnt['Incumple']) * 100 / total, 2) if total else 0,
+            'pct_incumple_total': round((total - cumple) * 100 / total, 2) if total else 0,
+        }
+
+    def ticket_list(pool):
+        return [{'id': t['id'], 'sitio': t['sitio'], 'ciudad': t['ciudad'], 'serie': t['serie']} for t in pool]
+
+    tickets_hoy   = [t for t in tickets if t['fecha'] == hoy]
+    tickets_mes   = tickets
+
+    # Timeline día a día
+    tl = defaultdict(lambda: {'total': 0, 'cumple': 0, 'incumple': 0, 'reprog': 0, 'sin': 0})
+    for t in tickets_mes:
+        f = t['fecha']
+        if not f: continue
+        tl[f]['total'] += 1
+        e = t['estado']
+        if   e == 'Cumple':         tl[f]['cumple']  += 1
+        elif e == 'Incumple':       tl[f]['incumple'] += 1
+        elif e == 'Reprogramación': tl[f]['reprog']   += 1
+        else:                       tl[f]['sin']      += 1
+    timeline_data = []
+    for f in sorted(tl):
+        v = tl[f]
+        p = round(v['cumple'] * 100 / v['total'], 1) if v['total'] else 0
+        timeline_data.append({
+            'fecha': f, 'day': int(f.split('-')[2]),
+            'total': v['total'], 'cumple': v['cumple'],
+            'incumple': v['incumple'], 'reprog': v['reprog'],
+            'sin': v['sin'], 'pct_cumple': p,
+        })
+
+    data_diario = {
+        'fecha_hoy':   hoy,
+        'fechas':      fechas,
+        'resumen_hoy': make_resumen(tickets_hoy),
+        'resumen_mes': make_resumen(tickets_mes),
+        'sla_hoy':     ticket_list([t for t in tickets_hoy if t['estado'] == 'Incumple']),
+        'reprog_hoy':  ticket_list([t for t in tickets_hoy if t['estado'] == 'Reprogramación']),
+        'cumple_hoy':  ticket_list([t for t in tickets_hoy if t['estado'] == 'Cumple']),
+        'cumple_mes':  ticket_list([t for t in tickets_mes if t['estado'] == 'Cumple']),
+        'timeline':    timeline_data,
+    }
+
+    js = 'const DATA_DIARIO = ' + json.dumps(data_diario, ensure_ascii=False, separators=(',', ':')) + ';\n'
+    with open(DATA_DIARIO_JS, 'w', encoding='utf-8') as f:
+        f.write(js)
+
+    return {
+        'fecha_hoy':  hoy,
+        'total_hoy':  data_diario['resumen_hoy']['total'],
+        'total_mes':  data_diario['resumen_mes']['total'],
+        'sla_hoy':    len(data_diario['sla_hoy']),
+        'reprog_hoy': len(data_diario['reprog_hoy']),
+    }
+
+
+# ── Auto-proceso al iniciar: regenera data-diario.js si hay archivo en input-diario/
+_files_diario = glob.glob(os.path.join(INPUT_DIR_DIARIO, '*'))
+if _files_diario:
+    try:
+        process_excel_diario(_files_diario[0])
+        print(f'[INFO] Datos diario cargados: {os.path.basename(_files_diario[0])}')
+    except Exception as e:
+        print(f'[WARN] No se pudo procesar datos diario: {e}')
 
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────

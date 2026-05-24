@@ -1,0 +1,844 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>ATM Operations · Incumplimiento Diario</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=JetBrains+Mono:wght@300;400;500;700&family=Geist:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+<link rel="stylesheet" href="css/home.css">
+<style>
+/* ── Incumplimiento diario – estilos específicos ──────────────────────────── */
+
+.id-banco-badge {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(255,198,0,0.1); border: 1px solid rgba(255,198,0,0.35);
+  border-radius: 8px; padding: 5px 12px;
+  font-size: 11px; font-weight: 700; color: #9a7a00;
+  letter-spacing: .04em; text-transform: uppercase;
+}
+.id-banco-dot { width: 8px; height: 8px; border-radius: 50%; background: #FFD600; }
+
+/* ── Tabla causal ─────────────────────────────────────────────────────────── */
+.causal-table {
+  width: 100%; border-collapse: collapse;
+  font-size: 13px;
+}
+.causal-table thead th {
+  text-align: left; padding: 8px 14px;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-mute);
+  border-bottom: 2px solid var(--line);
+}
+.causal-table thead th:not(:first-child) { text-align: right; }
+.causal-table tbody td {
+  padding: 11px 14px; border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.causal-table tbody td:not(:first-child) { text-align: right; font-family: 'JetBrains Mono', monospace; }
+.causal-table tbody tr:last-child td { border-bottom: none; }
+
+.causal-table .row-cumple td:first-child { border-left: 3px solid var(--green); }
+.causal-table .row-incumple td:first-child { border-left: 3px solid var(--red); }
+.causal-table .row-reprog td:first-child { border-left: 3px solid var(--amber); }
+.causal-table .row-incumple-cita td:first-child { border-left: 3px solid var(--violet); }
+.causal-table .row-total { background: var(--bg-2); }
+.causal-table .row-total td { font-weight: 700; font-size: 12px; }
+
+.pct-pill {
+  display: inline-block; padding: 2px 8px; border-radius: 6px;
+  font-size: 11px; font-weight: 700;
+}
+.pct-pill.green  { background: var(--green-glow);  color: var(--green); }
+.pct-pill.red    { background: var(--red-glow);    color: var(--red); }
+.pct-pill.amber  { background: var(--amber-glow);  color: var(--amber); }
+.pct-pill.violet { background: var(--violet-glow); color: var(--violet); }
+
+.total-group { font-weight: 800; font-size: 13px; }
+
+/* ── Fila cumple clickable ────────────────────────────────────────────────── */
+.causal-table tr[data-open-panel] { cursor: pointer; }
+.causal-table tr[data-open-panel]:hover td { background: var(--green-glow); }
+.cumple-hint {
+  font-size: 10px; font-weight: 600; color: var(--green);
+  opacity: .7; margin-left: 8px; letter-spacing: .03em;
+  vertical-align: middle;
+}
+
+/* ── Tabla tickets ────────────────────────────────────────────────────────── */
+.ticket-table {
+  width: 100%; border-collapse: collapse; font-size: 12.5px;
+}
+.ticket-table thead th {
+  text-align: left; padding: 7px 12px;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--text-mute);
+  border-bottom: 2px solid var(--line);
+  white-space: nowrap;
+}
+.ticket-table tbody td {
+  padding: 10px 12px; border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.ticket-table tbody tr:last-child td { border-bottom: none; }
+.ticket-table tbody tr:hover { background: var(--bg-2); }
+
+.ticket-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11.5px; font-weight: 600; color: var(--cyan);
+}
+.ticket-serie {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 700; color: var(--text);
+}
+.ticket-ciudad {
+  display: inline-block; padding: 2px 8px;
+  background: var(--bg-2); border-radius: 5px;
+  font-size: 11px; font-weight: 600; color: var(--text-dim);
+}
+
+/* ── Card count badge ─────────────────────────────────────────────────────── */
+.count-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 24px; height: 20px; padding: 0 7px;
+  border-radius: 999px; font-size: 10px; font-weight: 800;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: .02em;
+}
+.count-badge.red    { background: var(--red-glow);   color: var(--red); }
+.count-badge.amber  { background: var(--amber-glow); color: var(--amber); }
+.count-badge.green  { background: var(--green-glow); color: var(--green); }
+
+/* ── Bank sections ────────────────────────────────────────────────────────── */
+.id-bank-section { display: none; }
+.id-bank-section.active { display: block; }
+
+/* ── Soon tab badge ───────────────────────────────────────────────────────── */
+.soon-tab { opacity: .55; cursor: pointer !important; }
+.soon-tab-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: .08em;
+  text-transform: uppercase; padding: 2px 7px; border-radius: 5px;
+  background: var(--bg-2); color: var(--text-mute);
+  border: 1px solid var(--line-2); margin-left: 4px;
+}
+
+/* ── Soon placeholder section ─────────────────────────────────────────────── */
+.id-soon-section {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center;
+  padding: 80px 24px; gap: 14px;
+}
+.id-soon-icon {
+  width: 64px; height: 64px; border-radius: 16px;
+  border: 1px solid; display: flex; align-items: center; justify-content: center;
+  margin-bottom: 4px;
+}
+.id-soon-tag {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  color: var(--text-mute); background: var(--bg-2);
+  border: 1px solid var(--line-2); padding: 3px 12px;
+  border-radius: 999px; font-family: 'JetBrains Mono', monospace;
+}
+.id-soon-title {
+  font-size: 22px; font-weight: 700; color: var(--text);
+  letter-spacing: -0.02em;
+}
+.id-soon-sub {
+  font-size: 13px; color: var(--text-mute); line-height: 1.6;
+  max-width: 380px;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 32px 16px; gap: 8px;
+  color: var(--text-mute); font-size: 13px; text-align: center;
+}
+.empty-state .empty-icon { font-size: 28px; opacity: .4; }
+
+/* ── Mes progress bar ─────────────────────────────────────────────────────── */
+.mes-progress {
+  height: 6px; background: var(--line); border-radius: 999px;
+  overflow: hidden; margin-top: 6px;
+}
+.mes-progress-fill {
+  height: 100%; border-radius: 999px;
+  transition: width .4s ease;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- ===== HEADER ===== -->
+  <header class="header">
+    <div class="brand">
+      <a href="/" class="brand-back" title="Volver al inicio">←</a>
+      <div class="brand-mark">A</div>
+      <div class="brand-text">
+        <div class="eyebrow">ATM Operations · Belltech</div>
+        <h1>Incumplimiento Diario</h1>
+      </div>
+    </div>
+  </header>
+
+  <!-- ===== UPLOAD ===== -->
+  <div class="upload-bar">
+    <div class="upload-drop" id="upload-drop">
+      <div class="upload-icon">↑</div>
+      <div class="upload-info">
+        <div class="upload-label">
+          Arrastra tu Excel aquí o <label class="upload-link" for="file-input-diario">selecciona archivo</label>
+        </div>
+        <div class="upload-current" id="upload-current">Sin archivo cargado</div>
+      </div>
+      <div class="upload-status idle" id="upload-status"></div>
+      <div class="upload-progress" id="upload-progress"></div>
+      <input type="file" id="file-input-diario" accept=".xlsx,.xls" style="display:none">
+    </div>
+  </div>
+
+  <!-- ===== BANK NAV ===== -->
+  <nav class="bank-nav" id="id-bank-nav">
+    <button class="bank-tab-btn active" data-bank="bancolombia">
+      <span class="bank-dot" style="background:#FFD600"></span>Bancolombia
+    </button>
+    <button class="bank-tab-btn soon-tab" data-bank="bbva" title="Próximamente">
+      <span class="bank-dot" style="background:#004A97"></span>BBVA
+      <span class="soon-tab-badge">Próximamente</span>
+    </button>
+    <button class="bank-tab-btn soon-tab" data-bank="davivienda" title="Próximamente">
+      <span class="bank-dot" style="background:#ED1C24"></span>Davivienda
+      <span class="soon-tab-badge">Próximamente</span>
+    </button>
+  </nav>
+
+  <!-- ===== SECCIÓN BANCOLOMBIA ===== -->
+  <div id="section-bancolombia" class="id-bank-section active">
+
+    <!-- KPIs DEL DÍA -->
+    <div class="section-title">Resumen del Día
+      <span class="small" id="id-hoy-subtitle">Carga un archivo Excel para ver los datos</span>
+    </div>
+    <section class="kpi-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="kpi info">
+        <div class="label">Total tickets hoy</div>
+        <div class="value tabular" id="kpi-total-hoy">—</div>
+        <div class="sub" id="kpi-total-hoy-sub">sin datos</div>
+      </div>
+      <div class="kpi good">
+        <div class="label">Cumple cita</div>
+        <div class="value" id="kpi-cumple-hoy">—</div>
+        <div class="sub" id="kpi-cumple-hoy-sub">—</div>
+      </div>
+      <div class="kpi bad">
+        <div class="label">Incumple SLA</div>
+        <div class="value tabular" id="kpi-incumple-hoy">—</div>
+        <div class="sub" id="kpi-incumple-hoy-sub">—</div>
+      </div>
+      <div class="kpi warn">
+        <div class="label">Reprogramaciones</div>
+        <div class="value tabular" id="kpi-reprog-hoy">—</div>
+        <div class="sub" id="kpi-reprog-hoy-sub">—</div>
+      </div>
+    </section>
+
+    <!-- TABLA CAUSAL DEL DÍA -->
+    <div class="grid">
+      <div class="card col-12">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Distribución de causales · hoy</div>
+            <div class="card-sub">Desglose por CAUSAL #02 del día de coordinación</div>
+          </div>
+        </div>
+        <table class="causal-table">
+          <thead>
+            <tr>
+              <th>Causal</th>
+              <th>Cantidad</th>
+              <th>Porcentaje</th>
+              <th>Total grupo</th>
+            </tr>
+          </thead>
+          <tbody id="causal-tbody-hoy">
+            <tr><td colspan="4"><div class="empty-state"><span class="empty-icon">📋</span>Sin datos · carga un archivo Excel</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TICKETS SLA + REPROG DEL DÍA -->
+    <div class="section-title">Detalle de Incumplimientos · Hoy
+      <span class="small">tickets que generaron incumplimiento el día de hoy</span>
+    </div>
+    <div class="grid">
+
+      <!-- Tickets SLA -->
+      <div class="card col-7">
+        <div class="card-head">
+          <div>
+            <div class="card-title" style="display:flex;align-items:center;gap:10px">
+              Tickets · Incumple SLA
+              <span class="count-badge red" id="badge-sla">0</span>
+            </div>
+            <div class="card-sub">Belltech incumple SLA · coordinados hoy</div>
+          </div>
+          <div class="card-tag" style="color:var(--red);border-color:rgba(220,38,38,.3);background:var(--red-glow)">SLA</div>
+        </div>
+        <table class="ticket-table">
+          <thead>
+            <tr><th>Ticket ID</th><th>Sitio</th><th>Ciudad</th><th>Serie</th></tr>
+          </thead>
+          <tbody id="sla-tbody">
+            <tr><td colspan="4"><div class="empty-state"><span class="empty-icon">✓</span>Sin incumplimientos SLA hoy</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Tickets Reprogramación -->
+      <div class="card col-5">
+        <div class="card-head">
+          <div>
+            <div class="card-title" style="display:flex;align-items:center;gap:10px">
+              Tickets · Reprogramación
+              <span class="count-badge amber" id="badge-reprog">0</span>
+            </div>
+            <div class="card-sub">Belltech solicita reprogramación · hoy</div>
+          </div>
+          <div class="card-tag" style="color:var(--amber);border-color:rgba(217,119,6,.3);background:var(--amber-glow)">REPROG</div>
+        </div>
+        <table class="ticket-table">
+          <thead>
+            <tr><th>Ticket ID</th><th>Sitio</th><th>Ciudad</th><th>Serie</th></tr>
+          </thead>
+          <tbody id="reprog-tbody">
+            <tr><td colspan="4"><div class="empty-state"><span class="empty-icon">✓</span>Sin reprogramaciones hoy</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- RESUMEN DEL MES -->
+    <div class="section-title">Cumplimiento del Mes
+      <span class="small" id="id-mes-subtitle">acumulado del mes</span>
+    </div>
+
+    <section class="kpi-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px">
+      <div class="kpi info">
+        <div class="label">Total tickets mes</div>
+        <div class="value tabular" id="kpi-total-mes">—</div>
+        <div class="sub" id="kpi-total-mes-sub">sin datos</div>
+      </div>
+      <div class="kpi good">
+        <div class="label">Cumple cita</div>
+        <div class="value" id="kpi-cumple-mes">—</div>
+        <div class="sub" id="kpi-cumple-mes-sub">—</div>
+      </div>
+      <div class="kpi bad">
+        <div class="label">Incumple SLA + Cita</div>
+        <div class="value tabular" id="kpi-incumple-mes">—</div>
+        <div class="sub" id="kpi-incumple-mes-sub">—</div>
+      </div>
+      <div class="kpi warn">
+        <div class="label">Reprogramaciones</div>
+        <div class="value tabular" id="kpi-reprog-mes">—</div>
+        <div class="sub" id="kpi-reprog-mes-sub">—</div>
+      </div>
+    </section>
+
+    <!-- CHART TENDENCIA -->
+    <div class="grid">
+      <div class="card col-12">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Tendencia de cumplimiento · día a día</div>
+            <div class="card-sub">% de tickets cumplidos por día de coordinación · la línea punteada es el promedio del mes</div>
+          </div>
+        </div>
+        <div style="position:relative;height:200px">
+          <canvas id="chart-tendencia"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card col-12">
+        <div class="card-head">
+          <div>
+            <div class="card-title">Distribución de causales · <span id="id-mes-label">mes</span></div>
+            <div class="card-sub">Acumulado desde el 1 del mes hasta hoy</div>
+          </div>
+        </div>
+        <table class="causal-table">
+          <thead>
+            <tr>
+              <th>Causal</th>
+              <th>Cantidad</th>
+              <th>Porcentaje</th>
+              <th>Total grupo</th>
+            </tr>
+          </thead>
+          <tbody id="causal-tbody-mes">
+            <tr><td colspan="4"><div class="empty-state"><span class="empty-icon">📋</span>Sin datos · carga un archivo Excel</div></td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:24px;display:grid;gap:10px" id="mes-bars"></div>
+      </div>
+    </div>
+
+  </div><!-- /#section-bancolombia -->
+
+  <!-- ===== SECCIÓN BBVA (próximamente) ===== -->
+  <div id="section-bbva" class="id-bank-section">
+    <div class="id-soon-section">
+      <div class="id-soon-icon" style="background:rgba(0,74,151,0.08);border-color:rgba(0,74,151,0.18)">
+        <span style="color:#004A97;font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace">BB</span>
+      </div>
+      <div class="id-soon-tag">PRÓXIMAMENTE</div>
+      <div class="id-soon-title">Incumplimiento Diario · BBVA</div>
+      <div class="id-soon-sub">Este módulo estará disponible próximamente.<br>Por ahora el análisis de Bancolombia ya está activo.</div>
+    </div>
+  </div>
+
+  <!-- ===== SECCIÓN DAVIVIENDA (próximamente) ===== -->
+  <div id="section-davivienda" class="id-bank-section">
+    <div class="id-soon-section">
+      <div class="id-soon-icon" style="background:rgba(237,28,36,0.08);border-color:rgba(237,28,36,0.18)">
+        <span style="color:#ED1C24;font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace">DV</span>
+      </div>
+      <div class="id-soon-tag" style="color:#ED1C24;background:rgba(237,28,36,0.08);border-color:rgba(237,28,36,0.2)">PRÓXIMAMENTE</div>
+      <div class="id-soon-title">Incumplimiento Diario · Davivienda</div>
+      <div class="id-soon-sub">Este módulo estará disponible próximamente.<br>Por ahora el análisis de Bancolombia ya está activo.</div>
+    </div>
+  </div>
+
+</div><!-- /.container -->
+
+<!-- ===== PANEL DERECHO ===== -->
+<div class="overlay" id="overlay"></div>
+<aside class="panel" id="panel">
+  <div class="panel-head">
+    <div class="top">
+      <div>
+        <div class="panel-title" id="panel-title">Tickets</div>
+        <div class="panel-sub"   id="panel-sub">—</div>
+      </div>
+      <button class="panel-close" id="panel-close" aria-label="Cerrar">×</button>
+    </div>
+    <div class="panel-toolbar">
+      <input type="search" class="search-input" id="panel-search" placeholder="Buscar por ID, sitio, ciudad, serie…" />
+    </div>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="js/data-diario.js"></script>
+<script>
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  document.querySelectorAll('#id-bank-nav .bank-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bank = btn.dataset.bank;
+      document.querySelectorAll('#id-bank-nav .bank-tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.id-bank-section').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('section-' + bank).classList.add('active');
+    });
+  });
+
+  // ── Upload ─────────────────────────────────────────────────────────────────
+  const drop     = document.getElementById('upload-drop');
+  const input    = document.getElementById('file-input-diario');
+  const current  = document.getElementById('upload-current');
+  const status   = document.getElementById('upload-status');
+  const progress = document.getElementById('upload-progress');
+
+  function setStatus(type, msg) {
+    status.className = 'upload-status ' + type;
+    status.textContent = msg || '';
+  }
+
+  async function uploadFile(file) {
+    current.textContent = file.name;
+    setStatus('loading', 'Procesando…');
+    progress.style.width = '40%';
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const res  = await fetch('/api/upload-diario', { method: 'POST', body: fd });
+      const data = await res.json();
+      progress.style.width = '100%';
+
+      if (data.error) {
+        setStatus('error', data.error);
+        progress.style.width = '0';
+        return;
+      }
+
+      setStatus('ok', `✓ ${data.filename}`);
+      setTimeout(() => { progress.style.width = '0'; }, 600);
+      setTimeout(() => location.reload(), 800);
+
+    } catch (e) {
+      setStatus('error', 'Error de conexión');
+      progress.style.width = '0';
+    }
+  }
+
+  input.addEventListener('change', e => { if (e.target.files[0]) uploadFile(e.target.files[0]); });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('drag'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('drag'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('drag');
+    const file = e.dataTransfer.files[0];
+    if (file) uploadFile(file);
+  });
+
+  fetch('/api/status-diario').then(r => r.json()).then(d => {
+    if (d.current_file) {
+      current.textContent = d.current_file;
+      setStatus('ok', '✓ cargado');
+    }
+  });
+
+  // ── Panel derecho ──────────────────────────────────────────────────────────
+  const overlay    = document.getElementById('overlay');
+  const panel      = document.getElementById('panel');
+  const panelBody  = document.getElementById('panel-body');
+  const panelTitle = document.getElementById('panel-title');
+  const panelSub   = document.getElementById('panel-sub');
+  const panelSearch = document.getElementById('panel-search');
+
+  let _panelTickets = [];
+
+  function renderPanelCards(list) {
+    if (!list.length) {
+      panelBody.innerHTML = '<div class="empty-state"><div class="empty-icon">∅</div>No se encontraron tickets.</div>';
+      return;
+    }
+    const ciudades = new Set(list.map(t => t.ciudad).filter(Boolean));
+    const mini = `<div class="mini-stats">
+      <div class="mini-stat"><div class="ms-val">${list.length}</div><div class="ms-lbl">tickets</div></div>
+      <div class="mini-stat"><div class="ms-val" style="color:var(--green)">${list.length}</div><div class="ms-lbl">cumplen</div></div>
+      <div class="mini-stat"><div class="ms-val">${ciudades.size}</div><div class="ms-lbl">ciudades</div></div>
+    </div>`;
+    const cards = list.map(t => `
+      <div class="ticket-card">
+        <div class="tk-head">
+          <span class="tk-id">#${t.id || '—'}</span>
+          <span class="tk-status cumple">CUMPLE CITA</span>
+        </div>
+        <div class="tk-meta">
+          <div><span class="lbl">Sitio</span><b>${t.sitio || '—'}</b></div>
+          <div><span class="lbl">Ciudad</span><b>${(t.ciudad || '—').toUpperCase()}</b></div>
+          <div><span class="lbl">Serie</span><b>${t.serie || '—'}</b></div>
+        </div>
+      </div>`).join('');
+    panelBody.innerHTML = mini + cards;
+  }
+
+  function openCumplePanel(tickets, title, sub) {
+    _panelTickets = tickets;
+    panelTitle.textContent = title;
+    panelSub.textContent   = sub;
+    panelSearch.value = '';
+    renderPanelCards(tickets);
+    overlay.classList.add('open');
+    panel.classList.add('open');
+    panelBody.scrollTop = 0;
+  }
+
+  function closePanel() {
+    overlay.classList.remove('open');
+    panel.classList.remove('open');
+  }
+
+  overlay.addEventListener('click', closePanel);
+  document.getElementById('panel-close').addEventListener('click', closePanel);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+  panelSearch.addEventListener('input', () => {
+    const q = panelSearch.value.trim().toLowerCase();
+    if (!q) { renderPanelCards(_panelTickets); return; }
+    renderPanelCards(_panelTickets.filter(t =>
+      [t.id, t.sitio, t.ciudad, t.serie].some(v => v && String(v).toLowerCase().includes(q))
+    ));
+  });
+
+  // ── Render dinámico ────────────────────────────────────────────────────────
+  const DIAS_ES  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  const MESES_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+
+  function formatFechaES(s) {
+    if (!s) return '—';
+    const [y, m, d] = s.split('-').map(Number);
+    return `${DIAS_ES[new Date(y, m - 1, d).getDay()]} ${d} ${MESES_ES[m - 1]} ${y}`;
+  }
+
+  function pct(n, total) {
+    return total > 0 ? ((n || 0) * 100 / total).toFixed(2) + '%' : '0.00%';
+  }
+
+  const CAUSAL_META = {
+    'Cumple':         { cls: 'row-cumple',  pill: 'green',  tag: 'CUMPLE' },
+    'Incumple':       { cls: 'row-incumple', pill: 'red',   tag: 'INCUMPLE SLA' },
+    'Reprogramación': { cls: 'row-reprog',  pill: 'amber',  tag: 'REPROG' },
+    'Sin clasificar': { cls: '',            pill: 'violet', tag: 'SIN CAUSAL' },
+  };
+
+  const BAR_META = {
+    'Cumple':         { color: 'var(--green)',  label: 'Cumple cita' },
+    'Incumple':       { color: 'var(--red)',    label: 'Incumple SLA' },
+    'Reprogramación': { color: 'var(--amber)',  label: 'Reprogramación' },
+    'Sin clasificar': { color: 'var(--violet)', label: 'Sin causal' },
+  };
+
+  function buildCausalRows(rows, total) {
+    if (!rows || rows.length === 0)
+      return '<tr><td colspan="4"><div class="empty-state"><span class="empty-icon">📋</span>Sin datos</div></td></tr>';
+
+    const cumpleRow = rows.find(r => r.estado === 'Cumple');
+    const nonCumple = rows.filter(r => r.estado !== 'Cumple');
+    const ncTotal   = nonCumple.reduce((a, r) => a + r.count, 0);
+    const ncPct     = pct(ncTotal, total);
+    let html = '';
+
+    if (cumpleRow) {
+      const m = CAUSAL_META['Cumple'];
+      html += `<tr class="${m.cls}" data-open-panel="cumple" title="Ver detalle de tickets">
+        <td><span class="pct-pill ${m.pill}">${m.tag}</span>&nbsp; ${cumpleRow.label}<span class="cumple-hint">ver tickets →</span></td>
+        <td>${cumpleRow.count}</td>
+        <td><span class="pct-pill ${m.pill}">${cumpleRow.pct.toFixed(2)}%</span></td>
+        <td class="total-group" style="color:var(--green)">${cumpleRow.pct.toFixed(2)}%</td>
+      </tr>`;
+    }
+
+    nonCumple.forEach((row, i) => {
+      const m = CAUSAL_META[row.estado] || { cls: '', pill: 'violet', tag: row.estado.toUpperCase() };
+      const groupCell = (i === 0 && nonCumple.length > 1)
+        ? `<td rowspan="${nonCumple.length}" class="total-group" style="color:var(--red);vertical-align:middle;text-align:right;font-family:'JetBrains Mono',monospace">${ncPct}</td>`
+        : (i === 0 ? `<td class="total-group" style="color:var(--red);text-align:right;font-family:'JetBrains Mono',monospace">${ncPct}</td>` : '');
+      html += `<tr class="${m.cls}">
+        <td><span class="pct-pill ${m.pill}">${m.tag}</span>&nbsp; ${row.label}</td>
+        <td>${row.count}</td>
+        <td><span class="pct-pill ${m.pill}">${row.pct.toFixed(2)}%</span></td>
+        ${groupCell}
+      </tr>`;
+    });
+
+    html += `<tr class="row-total">
+      <td>Total general</td>
+      <td>${total}</td>
+      <td>100.00%</td>
+      <td style="text-align:right;font-family:'JetBrains Mono',monospace">100.00%</td>
+    </tr>`;
+    return html;
+  }
+
+  function buildTicketRows(tickets) {
+    if (!tickets || tickets.length === 0) return null;
+    return tickets.map(t => `<tr>
+      <td><span class="ticket-id">${t.id || '—'}</span></td>
+      <td>${t.sitio || '—'}</td>
+      <td><span class="ticket-ciudad">${(t.ciudad || '—').toUpperCase()}</span></td>
+      <td><span class="ticket-serie">${t.serie || '—'}</span></td>
+    </tr>`).join('');
+  }
+
+  function buildMesBars(rows) {
+    return (rows || []).map(r => {
+      const m = BAR_META[r.estado] || { color: 'var(--text-mute)', label: r.estado };
+      return `<div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px">
+          <span style="color:${m.color};font-weight:700">${m.label}</span>
+          <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:${m.color}">${r.pct.toFixed(2)}%</span>
+        </div>
+        <div class="mes-progress">
+          <div class="mes-progress-fill" style="width:${r.pct}%;background:${m.color}"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  function setEl(id, val) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  }
+  function setHTML(id, html) {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = html;
+  }
+
+  let _cumple_hoy = [];
+  let _cumple_mes = [];
+  let _chart      = null;
+
+  function renderDiario(d) {
+    _cumple_hoy = d.cumple_hoy || [];
+    _cumple_mes = d.cumple_mes || [];
+    const rh     = d.resumen_hoy;
+    const rm     = d.resumen_mes;
+    const dayNum = parseInt(d.fecha_hoy.slice(8), 10);
+    const monIdx = parseInt(d.fecha_hoy.slice(5, 7), 10) - 1;
+    const mesNom = MESES_ES[monIdx];
+    const year   = d.fecha_hoy.slice(0, 4);
+    const monStr = String(monIdx + 1).padStart(2, '0');
+
+    // --- Hoy ---
+    setEl('id-hoy-subtitle', `${formatFechaES(d.fecha_hoy)} · ${rh.total} tickets coordinados`);
+    setEl('kpi-total-hoy',     rh.total);
+    setEl('kpi-total-hoy-sub', `coordinados el ${dayNum}/${monStr}`);
+    setEl('kpi-cumple-hoy',     rh.cumple);
+    setEl('kpi-cumple-hoy-sub', `${rh.pct_cumple.toFixed(2)}% del día`);
+    setEl('kpi-incumple-hoy',     rh.incumple);
+    setEl('kpi-incumple-hoy-sub', `${rh.pct_incumple.toFixed(2)}% · ver detalle`);
+    setEl('kpi-reprog-hoy',     rh.reprog);
+    setEl('kpi-reprog-hoy-sub', `${pct(rh.reprog, rh.total)} del día`);
+
+    setHTML('causal-tbody-hoy', buildCausalRows(rh.rows, rh.total));
+
+    setEl('badge-sla',   d.sla_hoy.length);
+    setEl('badge-reprog', d.reprog_hoy.length);
+
+    const slaRows = buildTicketRows(d.sla_hoy);
+    setHTML('sla-tbody', slaRows ||
+      '<tr><td colspan="4"><div class="empty-state"><span class="empty-icon">✓</span>Sin incumplimientos SLA hoy</div></td></tr>');
+
+    const reprogRows = buildTicketRows(d.reprog_hoy);
+    setHTML('reprog-tbody', reprogRows ||
+      '<tr><td colspan="4"><div class="empty-state"><span class="empty-icon">✓</span>Sin reprogramaciones hoy</div></td></tr>');
+
+    // --- Mes ---
+    const mesLabel = mesNom.charAt(0).toUpperCase() + mesNom.slice(1) + ' ' + year;
+    setEl('id-mes-subtitle', `${mesLabel} · del 1 al ${dayNum} · acumulado`);
+    setEl('id-mes-label', mesNom + ' ' + year);
+    setEl('kpi-total-mes',     rm.total);
+    setEl('kpi-total-mes-sub', `del 1 al ${dayNum} ${mesNom}`);
+    setEl('kpi-cumple-mes',     rm.cumple);
+    setEl('kpi-cumple-mes-sub', `${rm.pct_cumple.toFixed(2)}% del mes`);
+    setEl('kpi-incumple-mes',     rm.incumple);
+    setEl('kpi-incumple-mes-sub', `${rm.pct_incumple.toFixed(2)}% · SLA + cita`);
+    setEl('kpi-reprog-mes',     rm.reprog);
+    setEl('kpi-reprog-mes-sub', `${pct(rm.reprog, rm.total)} del mes`);
+
+    setHTML('causal-tbody-mes', buildCausalRows(rm.rows, rm.total));
+    setHTML('mes-bars', buildMesBars(rm.rows));
+  }
+
+  function renderChart(d) {
+    if (!d.timeline || d.timeline.length < 2) return;
+    const ctx = document.getElementById('chart-tendencia').getContext('2d');
+    if (_chart) { _chart.destroy(); }
+
+    const tl     = d.timeline;
+    const labels = tl.map(t => t.day);
+    const values = tl.map(t => t.pct_cumple);
+    const avg    = d.resumen_mes.pct_cumple;
+
+    _chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: '% Cumplimiento',
+            data: values,
+            borderColor: 'rgba(22,163,74,0.9)',
+            backgroundColor: 'rgba(22,163,74,0.07)',
+            borderWidth: 2,
+            pointRadius: tl.map(t => t.fecha === d.fecha_hoy ? 5 : 3),
+            pointBackgroundColor: values.map(v => v >= avg ? 'rgba(22,163,74,0.9)' : 'rgba(220,38,38,0.85)'),
+            pointBorderColor: 'transparent',
+            fill: true,
+            tension: 0.35,
+          },
+          {
+            label: `Promedio: ${avg.toFixed(1)}%`,
+            data: Array(labels.length).fill(avg),
+            borderColor: 'rgba(100,116,139,0.35)',
+            borderWidth: 1.5,
+            borderDash: [5, 4],
+            pointRadius: 0,
+            fill: false,
+            tension: 0,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: items => formatFechaES(tl[items[0].dataIndex].fecha),
+              label: item => {
+                if (item.datasetIndex === 1) return ` Promedio mes: ${avg.toFixed(1)}%`;
+                const t = tl[item.dataIndex];
+                return [
+                  ` Cumplimiento: ${t.pct_cumple}%`,
+                  ` Total: ${t.total}  Cumple: ${t.cumple}  Incumple: ${t.incumple}`,
+                ];
+              },
+            },
+            backgroundColor: '#1e293b',
+            titleColor: '#94a3b8',
+            bodyColor: '#e2e8f0',
+            padding: 10,
+            cornerRadius: 8,
+          },
+        },
+        scales: {
+          x: {
+            grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: { color: '#64748b', font: { size: 11, family: "'JetBrains Mono', monospace" } },
+          },
+          y: {
+            min: 0, max: 100,
+            grid: { color: 'rgba(0,0,0,0.04)' },
+            ticks: { color: '#64748b', font: { size: 11 }, callback: v => v + '%' },
+          },
+        },
+      },
+    });
+  }
+
+  if (typeof DATA_DIARIO !== 'undefined' && DATA_DIARIO) {
+    renderDiario(DATA_DIARIO);
+    renderChart(DATA_DIARIO);
+  }
+
+  // Delegación de clicks en filas cumple
+  document.getElementById('causal-tbody-hoy').addEventListener('click', e => {
+    if (e.target.closest('tr[data-open-panel]')) {
+      const d = DATA_DIARIO;
+      openCumplePanel(_cumple_hoy,
+        'Tickets · Cumple Cita · Hoy',
+        `${formatFechaES(d.fecha_hoy)} · ${_cumple_hoy.length} ticket${_cumple_hoy.length !== 1 ? 's' : ''}`
+      );
+    }
+  });
+
+  document.getElementById('causal-tbody-mes').addEventListener('click', e => {
+    if (e.target.closest('tr[data-open-panel]')) {
+      const d = DATA_DIARIO;
+      const monIdx = parseInt(d.fecha_hoy.slice(5, 7), 10) - 1;
+      const dayNum = parseInt(d.fecha_hoy.slice(8), 10);
+      const mesNom = MESES_ES[monIdx];
+      openCumplePanel(_cumple_mes,
+        'Tickets · Cumple Cita · Mes',
+        `${mesNom.charAt(0).toUpperCase() + mesNom.slice(1)} ${d.fecha_hoy.slice(0, 4)} · del 1 al ${dayNum} · ${_cumple_mes.length} tickets`
+      );
+    }
+  });
+</script>
+</body>
+</html>
