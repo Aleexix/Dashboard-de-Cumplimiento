@@ -68,6 +68,15 @@ def index():
 def static_files(path):
     return send_from_directory(BASE_DIR, path)
 
+@app.route('/js/data-diario.js')
+def serve_data_diario_js():
+    """Sirve data-diario.js sin caché para que el browser siempre lea la versión recién procesada."""
+    resp = send_from_directory(os.path.join(BASE_DIR, 'js'), 'data-diario.js')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma']        = 'no-cache'
+    resp.headers['Expires']       = '0'
+    return resp
+
 @app.route('/api/debug-columns')
 def api_debug_columns():
     """Muestra qué columnas tiene el archivo actual y cómo se mapean."""
@@ -773,9 +782,9 @@ def process_excel_diario(filepath):
     # Solo Bancolombia por ahora
     tickets = [t for t in tickets if t['banco'] == 'bancolombia']
 
-    # Última fecha del archivo = "hoy"
+    # "Hoy" = última fecha del archivo (el archivo es la fuente de verdad, sin depender del reloj/zona del servidor)
     fechas = sorted(set(t['fecha'] for t in tickets if t['fecha']))
-    hoy    = max((f for f in fechas if f <= str(pd.Timestamp.today().date())), default=fechas[-1] if fechas else None)
+    hoy    = fechas[-1] if fechas else None
 
     def make_resumen(pool):
         total = len(pool)
