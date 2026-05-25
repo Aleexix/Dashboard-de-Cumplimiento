@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory
+from flask import Flask, request, jsonify, send_from_directory, Response
 import os, json, glob, traceback, unicodedata
 from datetime import datetime
 from collections import defaultdict
@@ -70,12 +70,21 @@ def static_files(path):
 
 @app.route('/js/data-diario.js')
 def serve_data_diario_js():
-    """Sirve data-diario.js sin caché para que el browser siempre lea la versión recién procesada."""
-    resp = send_from_directory(os.path.join(BASE_DIR, 'js'), 'data-diario.js')
-    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    resp.headers['Pragma']        = 'no-cache'
-    resp.headers['Expires']       = '0'
-    return resp
+    """Lee data-diario.js directamente y lo devuelve sin caché."""
+    try:
+        with open(DATA_DIARIO_JS, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except (FileNotFoundError, IOError):
+        content = 'const DATA_DIARIO = null;\n'
+    return Response(
+        content,
+        mimetype='application/javascript; charset=utf-8',
+        headers={
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+            'Pragma':        'no-cache',
+            'Expires':       '0',
+        }
+    )
 
 @app.route('/api/debug-columns')
 def api_debug_columns():
@@ -782,9 +791,12 @@ def process_excel_diario(filepath):
     # Solo Bancolombia por ahora
     tickets = [t for t in tickets if t['banco'] == 'bancolombia']
 
-    # "Hoy" = última fecha del archivo (el archivo es la fuente de verdad, sin depender del reloj/zona del servidor)
-    fechas = sorted(set(t['fecha'] for t in tickets if t['fecha']))
-    hoy    = fechas[-1] if fechas else None
+    # "Hoy" = fecha actual en Colombia (UTC-5), sin depender de la zona del servidor
+    from datetime import timezone, timedelta
+    _bogota = timezone(timedelta(hours=-5))
+    _hoy_co = str(datetime.now(tz=_bogota).date())
+    fechas  = sorted(set(t['fecha'] for t in tickets if t['fecha']))
+    hoy     = max((f for f in fechas if f <= _hoy_co), default=fechas[-1] if fechas else None)
 
     def make_resumen(pool):
         total = len(pool)
