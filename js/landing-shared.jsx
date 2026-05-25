@@ -54,7 +54,7 @@ function TopBar() {
     <header className="lb-topbar">
       <a className="lb-brand" href="/">
         <img
-          src="images/belltech-logo.svg"
+          src="images/logo-belltech.svg"
           alt="Belltech"
           style={{ height: 28, display: 'block' }}
           onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}

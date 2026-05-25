@@ -1329,20 +1329,3 @@ if ((DATA.reincidentes || []).length) {
   document.getElementById('reincidentes-title-global').style.display = '';
   document.getElementById('reincidentes-grid-global').style.display  = '';
 }
-
-// =========== INSIGHT ===========
-{
-  const peakBelltech = DATA.belltech_incumple_dias[0];
-  const peakOficina  = DATA.oficina_incumple_dias[0];
-  const worstCity    = [...DATA.ciudades].sort((a, b) => b.incumple - a.incumple)[0];
-  const topTipif     = DATA.tipif_incumple[0];
-  const topTitulo    = tituloIncumpleData[0];
-
-  document.getElementById('insight-text').innerHTML =
-    'Belltech registra <strong>' + k.belltech_pct_cumple.toFixed(1) + '% de cumplimiento</strong> contra ' + k.belltech_incumple + ' incumplimientos. ' +
-    'El peor día fue <em>' + fmtFecha(peakBelltech.fecha) + '</em> con ' + peakBelltech.count + ' incumplimientos. ' +
-    'La tipificación más asociada a fallos es <em>' + topTipif.tipif + '</em> (' + topTipif.count + ' casos), ' +
-    'y el título más frecuente en incumplimientos es <em>' + (topTitulo ? topTitulo.titulo : '—') + '</em>' + (topTitulo ? ' (' + topTitulo.count + ' casos)' : '') + '. ' +
-    'La ciudad con más incumplimientos Belltech es <em>' + worstCity.ciudad + '</em> (' + worstCity.incumple + ' de ' + worstCity.total + '). ' +
-    'Oficina mantiene un sólido <strong>' + k.oficina_pct_cumple.toFixed(1) + '%</strong> de cumplimiento; su peor día fue ' + fmtFecha(peakOficina.fecha) + '.';
-}

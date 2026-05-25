@@ -165,17 +165,6 @@ html, body {
 .section-title::before { content: ''; width: 3px; height: 16px; background: var(--line-2); border-radius: 2px; flex-shrink: 0; }
 .section-title .small { font-size: 11px; color: var(--text-mute); font-weight: 400; margin-left: auto; }
 
-/* ─── INSIGHT ─────────────────────────────────────────────────────────────────── */
-.insight {
-  background: var(--bg-1); border: 1px solid var(--line); border-radius: 10px;
-  padding: 16px 20px; margin: 20px 0; display: flex; gap: 14px; align-items: flex-start;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-}
-.insight-icon { font-size: 11px; font-weight: 600; color: var(--text-dim); background: var(--bg-2); padding: 4px 8px; border-radius: 5px; flex-shrink: 0; }
-.insight-text { font-size: 13px; color: var(--text-dim); line-height: 1.65; }
-.insight-text strong { color: var(--text); font-weight: 600; }
-.insight-text em { font-style: normal; color: var(--amber); font-weight: 500; }
-
 /* ─── SLIDE-OVER PANEL ────────────────────────────────────────────────────────── */
 .overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.4); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 99; }
 .overlay.open { opacity: 1; pointer-events: auto; }
